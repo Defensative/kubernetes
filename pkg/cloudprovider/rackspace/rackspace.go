@@ -424,6 +424,10 @@ func (os *Rackspace) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
 	return nil, false
 }
 
+func (os *Rackspace) UDPLoadBalancer() (cloudprovider.UDPLoadBalancer, bool) {
+	return nil, false
+}
+
 func (os *Rackspace) Zones() (cloudprovider.Zones, bool) {
 	glog.V(1).Info("Claiming to support Zones")
 

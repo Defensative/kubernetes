@@ -100,6 +100,10 @@ func (f *FakeCloud) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
 	return f, true
 }
 
+func (f *FakeCloud) UDPLoadBalancer() (cloudprovider.UDPLoadBalancer, bool) {
+	return nil, false
+}
+
 // Instances returns a fake implementation of Instances.
 //
 // Actually it just returns f itself.

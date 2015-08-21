@@ -608,6 +608,11 @@ func (s *AWSCloud) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
 	return s, true
 }
 
+// UDPLoadBalancer returns an implementation of UDPLoadBalancer for Google Compute Engine.
+func (s *AWSCloud) UDPLoadBalancer() (cloudprovider.UDPLoadBalancer, bool) {
+	return nil, false
+}
+
 // Instances returns an implementation of Instances for Amazon Web Services.
 func (aws *AWSCloud) Instances() (cloudprovider.Instances, bool) {
 	return aws, true

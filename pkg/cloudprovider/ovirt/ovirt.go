@@ -128,6 +128,10 @@ func (v *OVirtCloud) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
 	return nil, false
 }
 
+func (v *OVirtCloud) UDPLoadBalancer() (cloudprovider.UDPLoadBalancer, bool) {
+	return nil, false
+}
+
 // Instances returns an implementation of Instances for oVirt cloud
 func (v *OVirtCloud) Instances() (cloudprovider.Instances, bool) {
 	return v, true

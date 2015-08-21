@@ -96,6 +96,10 @@ func (v *VagrantCloud) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
 	return nil, false
 }
 
+func (v *VagrantCloud) UDPLoadBalancer() (cloudprovider.UDPLoadBalancer, bool) {
+	return nil, false
+}
+
 // Instances returns an implementation of Instances for Vagrant cloud.
 func (v *VagrantCloud) Instances() (cloudprovider.Instances, bool) {
 	return v, true
