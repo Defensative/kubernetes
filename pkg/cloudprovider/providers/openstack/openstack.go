@@ -426,6 +426,10 @@ func (os *OpenStack) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
 	return &LoadBalancer{network, compute, os.lbOpts}, true
 }
 
+func (os *OpenStack) UDPLoadBalancer() (cloudprovider.UDPLoadBalancer, bool) {
+	return nil, false
+}
+
 func isNotFound(err error) bool {
 	e, ok := err.(*gophercloud.UnexpectedResponseCodeError)
 	return ok && e.Actual == http.StatusNotFound

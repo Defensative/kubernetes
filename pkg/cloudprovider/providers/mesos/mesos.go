@@ -101,6 +101,10 @@ func (c *MesosCloud) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
 	return nil, false
 }
 
+func (c *MesosCloud) UDPLoadBalancer() (cloudprovider.UDPLoadBalancer, bool) {
+	return nil, false
+}
+
 // Zones always returns nil, false in this implementation.
 // Mesos does not provide any type of native region or zone awareness,
 // so this implementation always returns (nil, false).

@@ -69,7 +69,8 @@ type ServiceController struct {
 	cloud            cloudprovider.Interface
 	kubeClient       client.Interface
 	clusterName      string
-	balancer         cloudprovider.TCPLoadBalancer
+	tcp_balancer     cloudprovider.TCPLoadBalancer
+	udp_balancer     cloudprovider.UDPLoadBalancer
 	zone             cloudprovider.Zone
 	cache            *serviceCache
 	eventBroadcaster record.EventBroadcaster
@@ -150,11 +151,19 @@ func (s *ServiceController) init() error {
 		return fmt.Errorf("ServiceController should not be run without a cloudprovider.")
 	}
 
-	balancer, ok := s.cloud.TCPLoadBalancer()
+    // Make this non-fatal
+	udp_balancer, ok := s.cloud.UDPLoadBalancer()
+	if !ok {
+		glog.Errorf("the cloud provider does not support external UDP load balancers.")
+	}
+    // Should be nil in failure case
+	s.udp_balancer = udp_balancer
+
+	tcp_balancer, ok := s.cloud.TCPLoadBalancer()
 	if !ok {
 		return fmt.Errorf("the cloud provider does not support external TCP load balancers.")
 	}
-	s.balancer = balancer
+	s.tcp_balancer = tcp_balancer
 
 	zones, ok := s.cloud.Zones()
 	if !ok {
@@ -255,13 +264,17 @@ func (s *ServiceController) processDelta(delta *cache.Delta) (error, bool) {
 		cachedService.appliedState = service
 		s.cache.set(namespacedName.String(), cachedService)
 	case cache.Deleted:
-		s.eventRecorder.Event(service, "deleting loadbalancer", "deleting loadbalancer")
-		err := s.balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region)
-		if err != nil {
+        tcp, err := wantsTCPLoadBalancer(service)
+        if tcp && err == nil {
+            err = s.tcp_balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region)
+        } else if err == nil {
+            err = s.udp_balancer.EnsureUDPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region)
+        }
+        if err != nil {
 			message := "error deleting load balancer (will retry): " + err.Error()
 			s.eventRecorder.Event(service, "deleting loadbalancer failed", message)
-			return err, retryable
-		}
+            return err, retryable
+        }
 		s.eventRecorder.Event(service, "deleted loadbalancer", "deleted loadbalancer")
 		s.cache.delete(namespacedName.String())
 	default:
@@ -310,6 +323,25 @@ func (s *ServiceController) createLoadBalancerIfNeeded(namespacedName types.Name
 				return err, retryable
 			}
 			s.eventRecorder.Event(service, "deleted loadbalancer", "deleted loadbalancer")
+		}
+
+		service.Status.LoadBalancer = api.LoadBalancerStatus{}
+	} else {
+		glog.V(2).Infof("Ensuring LB for service %s", namespacedName)
+
+		// TODO: We could do a dry-run here if wanted to avoid the spurious cloud-calls & events when we restart
+
+		// The load balancer doesn't exist yet, so create it.
+		s.eventRecorder.Event(service, "creating loadbalancer", "creating loadbalancer")
+		err := s.createExternalLoadBalancer(service)
+		if err != nil {
+			return fmt.Errorf("failed to create external load balancer for service %s: %v", namespacedName, err), retryable
+		}
+		s.eventRecorder.Event(service, "created loadbalancer", "created loadbalancer")
+	}
+
+	// Write the state if changed
+	// TODO: Be careful here ... what if there were other changes to the service?
 		}
 
 		service.Status.LoadBalancer = api.LoadBalancerStatus{}
@@ -394,6 +426,27 @@ func (s *ServiceController) createExternalLoadBalancer(service *api.Service) err
 	} else {
 		status, err := s.balancer.EnsureTCPLoadBalancer(name, s.zone.Region, nil,
 			ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
+		if err != nil {
+			return err
+		} else {
+			service.Status.LoadBalancer = *status
+			if err != nil {
+				return err
+			} else {
+				service.Status.LoadBalancer = *status
+			}
+			break
+		}
+	} else {
+        var err error
+        var status *api.LoadBalancerStatus
+        if tcp {
+            status, err = s.tcp_balancer.CreateTCPLoadBalancer(name, s.zone.Region, nil,
+                ports, hostsFromNodeList(nodes), service.Spec.SessionAffinity)
+        } else {
+            status, err = s.udp_balancer.CreateUDPLoadBalancer(name, s.zone.Region, nil,
+                ports, hostsFromNodeList(nodes), service.Spec.SessionAffinity)
+        }
 		if err != nil {
 			return err
 		} else {
@@ -492,15 +545,37 @@ func (s *ServiceController) loadBalancerName(service *api.Service) string {
 	return cloudprovider.GetLoadBalancerName(service)
 }
 
+func wantsTCPLoadBalancer(service *api.Service) (bool, error) {
+    var protocol api.Protocol
+	for i := range service.Spec.Ports {
+		sp := &service.Spec.Ports[i]
+		if wantsExternalLoadBalancer(service) && sp.Protocol != api.ProtocolTCP && sp.Protocol != api.ProtocolUDP {
+			return false, fmt.Errorf("external load balancers for non TCP/UDP services are not currently supported.")
+		}
+        if protocol == "" {
+            protocol = sp.Protocol
+        // Mixed mode is only invalid for external load balancers
+        } else if protocol != sp.Protocol && wantsExternalLoadBalancer(service) {
+			return false, fmt.Errorf("mixed protocol external load balancers are not supported.")
+        }
+	}
+	return protocol == "TCP", nil
+}
 func getPortsForLB(service *api.Service) ([]*api.ServicePort, error) {
+    var protocol api.Protocol
 	ports := []*api.ServicePort{}
 	for i := range service.Spec.Ports {
-		// TODO: Support UDP. Remove the check from the API validation package once
-		// it's supported.
 		sp := &service.Spec.Ports[i]
-		if sp.Protocol != api.ProtocolTCP {
-			return nil, fmt.Errorf("external load balancers for non TCP services are not currently supported.")
+		if sp.Protocol != api.ProtocolTCP && sp.Protocol != api.ProtocolUDP {
+			return nil, fmt.Errorf("external load balancers for non TCP/UDP services are not currently supported.")
 		}
+        if protocol == "" {
+            protocol = sp.Protocol
+        // Mixed mode is only invalid for external load balancers
+        } else if protocol != sp.Protocol && wantsExternalLoadBalancer(service) {
+			return nil, fmt.Errorf("mixed protocol external load balancers are not supported.")
+        }
+
 		ports = append(ports, sp)
 	}
 	return ports, nil
@@ -683,6 +758,12 @@ func (s *ServiceController) lockedUpdateLoadBalancerHosts(service *api.Service, 
 
 	message := "error updating loadbalancer with new hosts: " + err.Error()
 	s.eventRecorder.Event(service, "updating loadbalancer failed", message)
+	return err
+}
+
+func wantsExternalLoadBalancer(service *api.Service) bool {
+	return service.Spec.Type == api.ServiceTypeLoadBalancer
+}
 	return err
 }
 
