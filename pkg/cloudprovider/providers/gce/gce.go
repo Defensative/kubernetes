@@ -371,9 +371,19 @@ func makeFirewallName(name string) string {
 // EnsureTCPLoadBalancer is an implementation of TCPLoadBalancer.EnsureTCPLoadBalancer.
 // TODO(a-robinson): Don't just ignore specified IP addresses. Check if they're
 // owned by the project and available to be used, and use them if they are.
-func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
+func EnsureLoadBalancer(gce *GCECloud, name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity, protocol string) (*api.LoadBalancerStatus, error) {
 	glog.V(2).Info("Checking if load balancer already exists: %s", name)
-	_, exists, err := gce.GetTCPLoadBalancer(name, region)
+
+    var err error
+    var exists bool
+    if protocol == "TCP" {
+        _, exists, err = gce.GetTCPLoadBalancer(name, region)
+    } else if protocol == "UDP" {
+        _, exists, err = gce.GetUDPLoadBalancer(name, region)
+    } else {
+        err = fmt.Errorf("%s is an invalid protocol", protocol)
+    }
+
 	if err != nil {
 		return nil, fmt.Errorf("error checking if GCE load balancer already exists: %v", err)
 	}
@@ -381,7 +391,12 @@ func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, externalIP net.I
 	// TODO: Implement a more efficient update strategy for common changes than delete & create
 	// In particular, if we implement hosts update, we can get rid of UpdateHosts
 	if exists {
-		err := gce.EnsureTCPLoadBalancerDeleted(name, region)
+        var err error
+        if protocol == "TCP" {
+            err = gce.EnsureTCPLoadBalancerDeleted(name, region)
+        } else {
+            err = gce.EnsureUDPLoadBalancerDeleted(name, region)
+        }
 		if err != nil {
 			return nil, fmt.Errorf("error deleting existing GCE load balancer: %v", err)
 		}
@@ -461,18 +476,18 @@ func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, externalIP net.I
 	return status, nil
 }
 
-// CreateUDPLoadBalancer is an implementation of UDPLoadBalancer.CreateUDPLoadBalancer.
+// EnsureUDPLoadBalancer is an implementation of UDPLoadBalancer.EnsureUDPLoadBalancer.
 // TODO(a-robinson): Don't just ignore specified IP addresses. Check if they're
 // owned by the project and available to be used, and use them if they are.
-func (gce *GCECloud) CreateUDPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
-    return CreateLoadBalancer(gce, name, region, externalIP, ports, hosts, affinityType, "UDP");
+func (gce *GCECloud) EnsureUDPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
+    return EnsureLoadBalancer(gce, name, region, externalIP, ports, hosts, affinityType, "UDP");
 }
 
-// CreateTCPLoadBalancer is an implementation of TCPLoadBalancer.CreateTCPLoadBalancer.
+// EnsureTCPLoadBalancer is an implementation of TCPLoadBalancer.EnsureTCPLoadBalancer.
 // TODO(a-robinson): Don't just ignore specified IP addresses. Check if they're
 // owned by the project and available to be used, and use them if they are.
-func (gce *GCECloud) CreateTCPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
-    return CreateLoadBalancer(gce, name, region, externalIP, ports, hosts, affinityType, "TCP");
+func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
+    return EnsureLoadBalancer(gce, name, region, externalIP, ports, hosts, affinityType, "TCP");
 }
 
 // This will add all tags that are a prefix of the host, which should handle the GKE case.

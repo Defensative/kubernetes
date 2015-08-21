@@ -82,8 +82,8 @@ type UDPLoadBalancer interface {
 	// GetUDPLoadBalancer returns whether the specified load balancer exists, and
 	// if so, what its status is.
 	GetUDPLoadBalancer(name, region string) (status *api.LoadBalancerStatus, exists bool, err error)
-	// CreateUDPLoadBalancer creates a new tcp load balancer. Returns the status of the balancer
-	CreateUDPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error)
+	// EnsureUDPLoadBalancer creates a new tcp load balancer. Returns the status of the balancer
+	EnsureUDPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error)
 	// UpdateUDPLoadBalancer updates hosts under the specified load balancer.
 	UpdateUDPLoadBalancer(name, region string, hosts []string) error
 	// EnsureUDPLoadBalancerDeleted deletes the specified load balancer if it
