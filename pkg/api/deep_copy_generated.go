@@ -30,12 +30,6 @@ import (
 	inf "speter.net/go/exp/math/dec/inf"
 )
 
-func deepCopy_api_APIVersion(in APIVersion, out *APIVersion, c *conversion.Cloner) error {
-	out.Name = in.Name
-	out.APIGroup = in.APIGroup
-	return nil
-}
-
 func deepCopy_api_AWSElasticBlockStoreVolumeSource(in AWSElasticBlockStoreVolumeSource, out *AWSElasticBlockStoreVolumeSource, c *conversion.Cloner) error {
 	out.VolumeID = in.VolumeID
 	out.FSType = in.FSType
@@ -74,6 +68,36 @@ func deepCopy_api_Capabilities(in Capabilities, out *Capabilities, c *conversion
 	} else {
 		out.Drop = nil
 	}
+	return nil
+}
+
+func deepCopy_api_CephFSVolumeSource(in CephFSVolumeSource, out *CephFSVolumeSource, c *conversion.Cloner) error {
+	if in.Monitors != nil {
+		out.Monitors = make([]string, len(in.Monitors))
+		for i := range in.Monitors {
+			out.Monitors[i] = in.Monitors[i]
+		}
+	} else {
+		out.Monitors = nil
+	}
+	out.User = in.User
+	out.SecretFile = in.SecretFile
+	if in.SecretRef != nil {
+		out.SecretRef = new(LocalObjectReference)
+		if err := deepCopy_api_LocalObjectReference(*in.SecretRef, out.SecretRef, c); err != nil {
+			return err
+		}
+	} else {
+		out.SecretRef = nil
+	}
+	out.ReadOnly = in.ReadOnly
+	return nil
+}
+
+func deepCopy_api_CinderVolumeSource(in CinderVolumeSource, out *CinderVolumeSource, c *conversion.Cloner) error {
+	out.VolumeID = in.VolumeID
+	out.FSType = in.FSType
+	out.ReadOnly = in.ReadOnly
 	return nil
 }
 
@@ -297,69 +321,6 @@ func deepCopy_api_ContainerStatus(in ContainerStatus, out *ContainerStatus, c *c
 	return nil
 }
 
-func deepCopy_api_Daemon(in Daemon, out *Daemon, c *conversion.Cloner) error {
-	if err := deepCopy_api_TypeMeta(in.TypeMeta, &out.TypeMeta, c); err != nil {
-		return err
-	}
-	if err := deepCopy_api_ObjectMeta(in.ObjectMeta, &out.ObjectMeta, c); err != nil {
-		return err
-	}
-	if err := deepCopy_api_DaemonSpec(in.Spec, &out.Spec, c); err != nil {
-		return err
-	}
-	if err := deepCopy_api_DaemonStatus(in.Status, &out.Status, c); err != nil {
-		return err
-	}
-	return nil
-}
-
-func deepCopy_api_DaemonList(in DaemonList, out *DaemonList, c *conversion.Cloner) error {
-	if err := deepCopy_api_TypeMeta(in.TypeMeta, &out.TypeMeta, c); err != nil {
-		return err
-	}
-	if err := deepCopy_api_ListMeta(in.ListMeta, &out.ListMeta, c); err != nil {
-		return err
-	}
-	if in.Items != nil {
-		out.Items = make([]Daemon, len(in.Items))
-		for i := range in.Items {
-			if err := deepCopy_api_Daemon(in.Items[i], &out.Items[i], c); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Items = nil
-	}
-	return nil
-}
-
-func deepCopy_api_DaemonSpec(in DaemonSpec, out *DaemonSpec, c *conversion.Cloner) error {
-	if in.Selector != nil {
-		out.Selector = make(map[string]string)
-		for key, val := range in.Selector {
-			out.Selector[key] = val
-		}
-	} else {
-		out.Selector = nil
-	}
-	if in.Template != nil {
-		out.Template = new(PodTemplateSpec)
-		if err := deepCopy_api_PodTemplateSpec(*in.Template, out.Template, c); err != nil {
-			return err
-		}
-	} else {
-		out.Template = nil
-	}
-	return nil
-}
-
-func deepCopy_api_DaemonStatus(in DaemonStatus, out *DaemonStatus, c *conversion.Cloner) error {
-	out.CurrentNumberScheduled = in.CurrentNumberScheduled
-	out.NumberMisscheduled = in.NumberMisscheduled
-	out.DesiredNumberScheduled = in.DesiredNumberScheduled
-	return nil
-}
-
 func deepCopy_api_DeleteOptions(in DeleteOptions, out *DeleteOptions, c *conversion.Cloner) error {
 	if err := deepCopy_api_TypeMeta(in.TypeMeta, &out.TypeMeta, c); err != nil {
 		return err
@@ -369,6 +330,28 @@ func deepCopy_api_DeleteOptions(in DeleteOptions, out *DeleteOptions, c *convers
 		*out.GracePeriodSeconds = *in.GracePeriodSeconds
 	} else {
 		out.GracePeriodSeconds = nil
+	}
+	return nil
+}
+
+func deepCopy_api_DownwardAPIVolumeFile(in DownwardAPIVolumeFile, out *DownwardAPIVolumeFile, c *conversion.Cloner) error {
+	out.Path = in.Path
+	if err := deepCopy_api_ObjectFieldSelector(in.FieldRef, &out.FieldRef, c); err != nil {
+		return err
+	}
+	return nil
+}
+
+func deepCopy_api_DownwardAPIVolumeSource(in DownwardAPIVolumeSource, out *DownwardAPIVolumeSource, c *conversion.Cloner) error {
+	if in.Items != nil {
+		out.Items = make([]DownwardAPIVolumeFile, len(in.Items))
+		for i := range in.Items {
+			if err := deepCopy_api_DownwardAPIVolumeFile(in.Items[i], &out.Items[i], c); err != nil {
+				return err
+			}
+		}
+	} else {
+		out.Items = nil
 	}
 	return nil
 }
@@ -694,6 +677,30 @@ func deepCopy_api_LimitRangeItem(in LimitRangeItem, out *LimitRangeItem, c *conv
 		}
 	} else {
 		out.Default = nil
+	}
+	if in.DefaultRequest != nil {
+		out.DefaultRequest = make(ResourceList)
+		for key, val := range in.DefaultRequest {
+			newVal := new(resource.Quantity)
+			if err := deepCopy_resource_Quantity(val, newVal, c); err != nil {
+				return err
+			}
+			out.DefaultRequest[key] = *newVal
+		}
+	} else {
+		out.DefaultRequest = nil
+	}
+	if in.MaxLimitRequestRatio != nil {
+		out.MaxLimitRequestRatio = make(ResourceList)
+		for key, val := range in.MaxLimitRequestRatio {
+			newVal := new(resource.Quantity)
+			if err := deepCopy_resource_Quantity(val, newVal, c); err != nil {
+				return err
+			}
+			out.MaxLimitRequestRatio[key] = *newVal
+		}
+	} else {
+		out.MaxLimitRequestRatio = nil
 	}
 	return nil
 }
@@ -1222,6 +1229,22 @@ func deepCopy_api_PersistentVolumeSource(in PersistentVolumeSource, out *Persist
 		}
 	} else {
 		out.ISCSI = nil
+	}
+	if in.Cinder != nil {
+		out.Cinder = new(CinderVolumeSource)
+		if err := deepCopy_api_CinderVolumeSource(*in.Cinder, out.Cinder, c); err != nil {
+			return err
+		}
+	} else {
+		out.Cinder = nil
+	}
+	if in.CephFS != nil {
+		out.CephFS = new(CephFSVolumeSource)
+		if err := deepCopy_api_CephFSVolumeSource(*in.CephFS, out.CephFS, c); err != nil {
+			return err
+		}
+	} else {
+		out.CephFS = nil
 	}
 	return nil
 }
@@ -2027,65 +2050,6 @@ func deepCopy_api_TCPSocketAction(in TCPSocketAction, out *TCPSocketAction, c *c
 	return nil
 }
 
-func deepCopy_api_ThirdPartyResource(in ThirdPartyResource, out *ThirdPartyResource, c *conversion.Cloner) error {
-	if err := deepCopy_api_TypeMeta(in.TypeMeta, &out.TypeMeta, c); err != nil {
-		return err
-	}
-	if err := deepCopy_api_ObjectMeta(in.ObjectMeta, &out.ObjectMeta, c); err != nil {
-		return err
-	}
-	out.Description = in.Description
-	if in.Versions != nil {
-		out.Versions = make([]APIVersion, len(in.Versions))
-		for i := range in.Versions {
-			if err := deepCopy_api_APIVersion(in.Versions[i], &out.Versions[i], c); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Versions = nil
-	}
-	return nil
-}
-
-func deepCopy_api_ThirdPartyResourceData(in ThirdPartyResourceData, out *ThirdPartyResourceData, c *conversion.Cloner) error {
-	if err := deepCopy_api_TypeMeta(in.TypeMeta, &out.TypeMeta, c); err != nil {
-		return err
-	}
-	if err := deepCopy_api_ObjectMeta(in.ObjectMeta, &out.ObjectMeta, c); err != nil {
-		return err
-	}
-	if in.Data != nil {
-		out.Data = make([]uint8, len(in.Data))
-		for i := range in.Data {
-			out.Data[i] = in.Data[i]
-		}
-	} else {
-		out.Data = nil
-	}
-	return nil
-}
-
-func deepCopy_api_ThirdPartyResourceList(in ThirdPartyResourceList, out *ThirdPartyResourceList, c *conversion.Cloner) error {
-	if err := deepCopy_api_TypeMeta(in.TypeMeta, &out.TypeMeta, c); err != nil {
-		return err
-	}
-	if err := deepCopy_api_ListMeta(in.ListMeta, &out.ListMeta, c); err != nil {
-		return err
-	}
-	if in.Items != nil {
-		out.Items = make([]ThirdPartyResource, len(in.Items))
-		for i := range in.Items {
-			if err := deepCopy_api_ThirdPartyResource(in.Items[i], &out.Items[i], c); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Items = nil
-	}
-	return nil
-}
-
 func deepCopy_api_TypeMeta(in TypeMeta, out *TypeMeta, c *conversion.Cloner) error {
 	out.Kind = in.Kind
 	out.APIVersion = in.APIVersion
@@ -2196,6 +2160,30 @@ func deepCopy_api_VolumeSource(in VolumeSource, out *VolumeSource, c *conversion
 	} else {
 		out.RBD = nil
 	}
+	if in.Cinder != nil {
+		out.Cinder = new(CinderVolumeSource)
+		if err := deepCopy_api_CinderVolumeSource(*in.Cinder, out.Cinder, c); err != nil {
+			return err
+		}
+	} else {
+		out.Cinder = nil
+	}
+	if in.CephFS != nil {
+		out.CephFS = new(CephFSVolumeSource)
+		if err := deepCopy_api_CephFSVolumeSource(*in.CephFS, out.CephFS, c); err != nil {
+			return err
+		}
+	} else {
+		out.CephFS = nil
+	}
+	if in.DownwardAPI != nil {
+		out.DownwardAPI = new(DownwardAPIVolumeSource)
+		if err := deepCopy_api_DownwardAPIVolumeSource(*in.DownwardAPI, out.DownwardAPI, c); err != nil {
+			return err
+		}
+	} else {
+		out.DownwardAPI = nil
+	}
 	return nil
 }
 
@@ -2233,10 +2221,11 @@ func deepCopy_util_Time(in util.Time, out *util.Time, c *conversion.Cloner) erro
 
 func init() {
 	err := Scheme.AddGeneratedDeepCopyFuncs(
-		deepCopy_api_APIVersion,
 		deepCopy_api_AWSElasticBlockStoreVolumeSource,
 		deepCopy_api_Binding,
 		deepCopy_api_Capabilities,
+		deepCopy_api_CephFSVolumeSource,
+		deepCopy_api_CinderVolumeSource,
 		deepCopy_api_ComponentCondition,
 		deepCopy_api_ComponentStatus,
 		deepCopy_api_ComponentStatusList,
@@ -2247,11 +2236,9 @@ func init() {
 		deepCopy_api_ContainerStateTerminated,
 		deepCopy_api_ContainerStateWaiting,
 		deepCopy_api_ContainerStatus,
-		deepCopy_api_Daemon,
-		deepCopy_api_DaemonList,
-		deepCopy_api_DaemonSpec,
-		deepCopy_api_DaemonStatus,
 		deepCopy_api_DeleteOptions,
+		deepCopy_api_DownwardAPIVolumeFile,
+		deepCopy_api_DownwardAPIVolumeSource,
 		deepCopy_api_EmptyDirVolumeSource,
 		deepCopy_api_EndpointAddress,
 		deepCopy_api_EndpointPort,
@@ -2349,9 +2336,6 @@ func init() {
 		deepCopy_api_StatusCause,
 		deepCopy_api_StatusDetails,
 		deepCopy_api_TCPSocketAction,
-		deepCopy_api_ThirdPartyResource,
-		deepCopy_api_ThirdPartyResourceData,
-		deepCopy_api_ThirdPartyResourceList,
 		deepCopy_api_TypeMeta,
 		deepCopy_api_Volume,
 		deepCopy_api_VolumeMount,

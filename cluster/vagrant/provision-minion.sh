@@ -72,15 +72,22 @@ EOF
 # See: https://github.com/mitchellh/vagrant/issues/2430
 hostnamectl set-hostname ${MINION_NAME}
 
-# Workaround to vagrant inability to guess interface naming sequence
-# Tell system to abandon the new naming scheme and use eth* instead
-rm -f /etc/sysconfig/network-scripts/ifcfg-enp0s3
+if [[ "$(grep 'VERSION_ID' /etc/os-release)" =~ ^VERSION_ID=21 ]]; then
+  # Workaround to vagrant inability to guess interface naming sequence
+  # Tell system to abandon the new naming scheme and use eth* instead
+  rm -f /etc/sysconfig/network-scripts/ifcfg-enp0s3
 
-# Disable network interface being managed by Network Manager (needed for Fedora 21+)
-NETWORK_CONF_PATH=/etc/sysconfig/network-scripts/
-grep -q ^NM_CONTROLLED= ${NETWORK_CONF_PATH}ifcfg-eth1 || echo 'NM_CONTROLLED=no' >> ${NETWORK_CONF_PATH}ifcfg-eth1
-sed -i 's/^#NM_CONTROLLED=.*/NM_CONTROLLED=no/' ${NETWORK_CONF_PATH}ifcfg-eth1
-systemctl restart network
+  # Disable network interface being managed by Network Manager (needed for Fedora 21+)
+  NETWORK_CONF_PATH=/etc/sysconfig/network-scripts/
+  if_to_edit=$( find ${NETWORK_CONF_PATH}ifcfg-* | xargs grep -l VAGRANT-BEGIN )
+  for if_conf in ${if_to_edit}; do
+    grep -q ^NM_CONTROLLED= ${if_conf} || echo 'NM_CONTROLLED=no' >> ${if_conf}
+    sed -i 's/#^NM_CONTROLLED=.*/NM_CONTROLLED=no/' ${if_conf}
+  done;
+  systemctl restart network
+fi
+
+NETWORK_IF_NAME=`echo ${if_to_edit} | awk -F- '{ print $3 }'`
 
 # Setup hosts file to support ping by hostname to master
 if [ ! "$(cat /etc/hosts | grep $MASTER_NAME)" ]; then
@@ -140,13 +147,17 @@ grains:
   network_mode: openvswitch
   node_ip: '$(echo "$MINION_IP" | sed -e "s/'/''/g")'
   api_servers: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
-  networkInterfaceName: eth1
+  networkInterfaceName: '$(echo "$NETWORK_IF_NAME" | sed -e "s/'/''/g")'
   roles:
     - kubernetes-pool
   cbr-cidr: '$(echo "$CONTAINER_SUBNET" | sed -e "s/'/''/g")'
   hostname_override: '$(echo "$MINION_IP" | sed -e "s/'/''/g")'
   docker_opts: '$(echo "$DOCKER_OPTS" | sed -e "s/'/''/g")'
 EOF
+
+# QoS support requires that swap memory is disabled on each of the minions
+echo "Disable swap memory to ensure proper QoS"
+swapoff -a
 
 # we will run provision to update code each time we test, so we do not want to do salt install each time
 if ! which salt-minion >/dev/null 2>&1; then

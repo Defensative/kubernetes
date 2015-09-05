@@ -25,10 +25,6 @@ You can use \-\-output=template \-\-template=TEMPLATE to extract specific values
     flatten the resulting kubeconfig file into self contained output (useful for creating portable kubeconfig files)
 
 .PP
-\fB\-h\fP, \fB\-\-help\fP=false
-    help for view
-
-.PP
 \fB\-\-merge\fP=true
     merge together the full hierarchy of kubeconfig files
 
@@ -42,7 +38,7 @@ You can use \-\-output=template \-\-template=TEMPLATE to extract specific values
 
 .PP
 \fB\-o\fP, \fB\-\-output\fP=""
-    Output format. One of: json|yaml|template|templatefile|wide|jsonpath.
+    Output format. One of: json|yaml|template|templatefile|wide|jsonpath|name.
 
 .PP
 \fB\-\-output\-version\fP=""
@@ -155,10 +151,6 @@ You can use \-\-output=template \-\-template=TEMPLATE to extract specific values
 .PP
 \fB\-\-v\fP=0
     log level for V logs
-
-.PP
-\fB\-\-validate\fP=false
-    If true, use a schema to validate the input before sending it
 
 .PP
 \fB\-\-vmodule\fP=

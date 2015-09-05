@@ -18,9 +18,9 @@
 # gcloud multiplexing for shared GCE/GKE tests.
 GCLOUD=gcloud
 ZONE=${KUBE_GCE_ZONE:-us-central1-b}
-MASTER_SIZE=${MASTER_SIZE:-n1-standard-1}
-MINION_SIZE=${MINION_SIZE:-n1-standard-1}
-NUM_MINIONS=${NUM_MINIONS:-2}
+MASTER_SIZE=${MASTER_SIZE:-n1-standard-2}
+MINION_SIZE=${MINION_SIZE:-n1-standard-2}
+NUM_MINIONS=${NUM_MINIONS:-3}
 MASTER_DISK_TYPE=pd-ssd
 MASTER_DISK_SIZE=${MASTER_DISK_SIZE:-20GB}
 MINION_DISK_TYPE=pd-standard
@@ -82,6 +82,12 @@ DNS_SERVER_IP="10.0.0.10"
 DNS_DOMAIN="cluster.local"
 DNS_REPLICAS=1
 
+# Optional: Install cluster docker registry.
+ENABLE_CLUSTER_REGISTRY="${KUBE_ENABLE_CLUSTER_REGISTRY:-true}"
+CLUSTER_REGISTRY_DISK="${CLUSTER_REGISTRY_DISK:-${INSTANCE_PREFIX}-kube-system-kube-registry}"
+CLUSTER_REGISTRY_DISK_SIZE="${CLUSTER_REGISTRY_DISK_SIZE:-200GB}"
+CLUSTER_REGISTRY_DISK_TYPE_GCE="${CLUSTER_REGISTRY_DISK_TYPE_GCE:-pd-standard}"
+
 # Optional: Install Kubernetes UI
 ENABLE_CLUSTER_UI="${KUBE_ENABLE_CLUSTER_UI:-true}"
 
@@ -94,7 +100,13 @@ if [[ "${ENABLE_NODE_AUTOSCALER}" == "true" ]]; then
   TARGET_NODE_UTILIZATION="${KUBE_TARGET_NODE_UTILIZATION:-0.7}"
 fi
 
-ADMISSION_CONTROL=NamespaceLifecycle,NamespaceExists,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota
+ADMISSION_CONTROL=NamespaceLifecycle,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota
 
 # Optional: if set to true kube-up will automatically check for existing resources and clean them up.
 KUBE_UP_AUTOMATIC_CLEANUP=${KUBE_UP_AUTOMATIC_CLEANUP:-false}
+
+# Optional: setting it to true denotes this is a testing cluster,
+# so that we can use pulled kubernetes binaries, even if binaries
+# are pre-installed in the image. Note that currently this logic
+# is only supported in trusty nodes.
+TEST_CLUSTER="${TEST_CLUSTER:-true}"

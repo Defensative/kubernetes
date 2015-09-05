@@ -36,10 +36,6 @@ of the \-\-template flag, you can filter the attributes of the fetched resource(
     Filename, directory, or URL to a file identifying the resource to get from a server.
 
 .PP
-\fB\-h\fP, \fB\-\-help\fP=false
-    help for get
-
-.PP
 \fB\-L\fP, \fB\-\-label\-columns\fP=[]
     Accepts a comma separated list of labels that are going to be presented as columns. Names are case\-sensitive. You can also use multiple flag statements like \-L label1 \-L label2...
 
@@ -49,7 +45,7 @@ of the \-\-template flag, you can filter the attributes of the fetched resource(
 
 .PP
 \fB\-o\fP, \fB\-\-output\fP=""
-    Output format. One of: json|yaml|template|templatefile|wide|jsonpath.
+    Output format. One of: json|yaml|template|templatefile|wide|jsonpath|name.
 
 .PP
 \fB\-\-output\-version\fP=""
@@ -172,10 +168,6 @@ of the \-\-template flag, you can filter the attributes of the fetched resource(
     log level for V logs
 
 .PP
-\fB\-\-validate\fP=false
-    If true, use a schema to validate the input before sending it
-
-.PP
 \fB\-\-vmodule\fP=
     comma\-separated list of pattern=N settings for file\-filtered logging
 
@@ -191,6 +183,9 @@ $ kubectl get pods
 # List all pods in ps output format with more information (such as node name).
 $ kubectl get pods \-o wide
 
+# List all pods in resource/name format (such as pod/nginx).
+$ kubectl get pods \-o name
+
 # List a single replication controller with specified NAME in ps output format.
 $ kubectl get replicationcontroller web
 
@@ -201,7 +196,7 @@ $ kubectl get \-o json pod web\-pod\-13je7
 $ kubectl get \-f pod.yaml \-o json
 
 # Return only the phase value of the specified pod.
-$ kubectl get \-o template web\-pod\-13je7 \-\-template={{.status.phase}} \-\-api\-version=v1
+$ kubectl get \-o template pod/web\-pod\-13je7 \-\-template={{.status.phase}} \-\-api\-version=v1
 
 # List all replication controllers and services together in ps output format.
 $ kubectl get rc,services

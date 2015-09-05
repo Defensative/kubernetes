@@ -176,7 +176,7 @@ function copy-if-not-staged() {
   local -r hash=$4
 
   if already-staged "${tar}" "${hash}"; then
-    echo "+++ $(basename ${tar}) already staged ('rm ${tar}.sha1' to force)"
+    echo "+++ $(basename ${tar}) already staged ('rm ${tar}.uploaded.sha1' to force)"
   else
     echo "${hash}" > "${tar}.sha1"
     gsutil -m -q -h "Cache-Control:private, max-age=0" cp "${tar}" "${tar}.sha1" "${staging_path}"
@@ -249,7 +249,7 @@ function detect-minion-names {
   detect-project
   MINION_NAMES=($(gcloud compute instance-groups managed list-instances \
     "${NODE_INSTANCE_PREFIX}-group" --zone "${ZONE}" --project "${PROJECT}" \
-    | cut -d'/' -f11))
+    --format=yaml | grep instance: | cut -d ' ' -f 2))
   echo "MINION_NAMES=${MINION_NAMES[*]}" >&2
 }
 
@@ -304,38 +304,6 @@ function detect-master () {
   echo "Using master: $KUBE_MASTER (external IP: $KUBE_MASTER_IP)"
 }
 
-# Ensure that we have a password created for validating to the master.  Will
-# read from kubeconfig for the current context if available.
-#
-# Assumed vars
-#   KUBE_ROOT
-#
-# Vars set:
-#   KUBE_USER
-#   KUBE_PASSWORD
-function get-password {
-  get-kubeconfig-basicauth
-  if [[ -z "${KUBE_USER}" || -z "${KUBE_PASSWORD}" ]]; then
-    KUBE_USER=admin
-    KUBE_PASSWORD=$(python -c 'import string,random; print "".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(16))')
-  fi
-}
-
-# Ensure that we have a bearer token created for validating to the master.
-# Will read from kubeconfig for the current context if available.
-#
-# Assumed vars
-#   KUBE_ROOT
-#
-# Vars set:
-#   KUBE_BEARER_TOKEN
-function get-bearer-token() {
-  get-kubeconfig-bearertoken
-  if [[ -z "${KUBE_BEARER_TOKEN:-}" ]]; then
-    KUBE_BEARER_TOKEN=$(dd if=/dev/urandom bs=128 count=1 2>/dev/null | base64 | tr -d "=+/" | dd bs=32 count=1 2>/dev/null)
-  fi
-}
-
 # Wait for background jobs to finish. Exit with
 # an error status if any of the jobs failed.
 function wait-for-jobs {
@@ -386,7 +354,7 @@ function create-node-template {
   detect-project
 
   # First, ensure the template doesn't exist.
-  # TODO(mbforbes): To make this really robust, we need to parse the output and
+  # TODO(zmerlynn): To make this really robust, we need to parse the output and
   #                 add retries. Just relying on a non-zero exit code doesn't
   #                 distinguish an ephemeral failed call from a "not-exists".
   if gcloud compute instance-templates describe "$1" --project "${PROJECT}" &>/dev/null; then
@@ -577,8 +545,8 @@ function kube-up {
   ensure-temp-dir
   detect-project
 
-  get-password
-  get-bearer-token
+  gen-kube-basicauth
+  gen-kube-bearertoken
 
   # Make sure we have the tar files staged on Google Storage
   find-release-tars
@@ -643,6 +611,15 @@ function kube-up {
     --type "${MASTER_DISK_TYPE}" \
     --size "${MASTER_DISK_SIZE}"
 
+  # Create disk for cluster registry if enabled
+  if [[ "${ENABLE_CLUSTER_REGISTRY}" == true && -n "${CLUSTER_REGISTRY_DISK}" ]]; then
+    gcloud compute disks create "${CLUSTER_REGISTRY_DISK}" \
+      --project "${PROJECT}" \
+      --zone "${ZONE}" \
+      --type "${CLUSTER_REGISTRY_DISK_TYPE_GCE}" \
+      --size "${CLUSTER_REGISTRY_DISK_SIZE}" &
+  fi
+
   # Generate a bearer token for this cluster. We push this separately
   # from the other cluster variables so that the client (this
   # computer) can forget it later. This should disappear with
@@ -676,7 +653,7 @@ function kube-up {
 
   echo "Creating minions."
 
-  # TODO(mbforbes): Refactor setting scope flags.
+  # TODO(zmerlynn): Refactor setting scope flags.
   local scope_flags=
   if [ -n "${MINION_SCOPES}" ]; then
     scope_flags="--scopes ${MINION_SCOPES}"
@@ -749,6 +726,8 @@ function kube-up {
    create-kubeconfig
   )
 
+  # ensures KUBECONFIG is set
+  get-kubeconfig-basicauth
   echo
   echo -e "${color_green}Kubernetes cluster is running.  The master is running at:"
   echo
@@ -835,6 +814,17 @@ function kube-down {
       --quiet \
       --zone "${ZONE}" \
       "${MASTER_NAME}"-pd
+  fi
+
+  # Delete disk for cluster registry if enabled
+  if [[ "${ENABLE_CLUSTER_REGISTRY}" == true && -n "${CLUSTER_REGISTRY_DISK}" ]]; then
+    if gcloud compute disks describe "${CLUSTER_REGISTRY_DISK}" --zone "${ZONE}" --project "${PROJECT}" &>/dev/null; then
+      gcloud compute disks delete \
+        --project "${PROJECT}" \
+        --quiet \
+        --zone "${ZONE}" \
+        "${CLUSTER_REGISTRY_DISK}"
+    fi
   fi
 
   # Find out what minions are running.
@@ -955,6 +945,11 @@ function check-resources {
     return 1
   fi
 
+  if gcloud compute disks describe --project "${PROJECT}" "${CLUSTER_REGISTRY_DISK}" --zone "${ZONE}" &>/dev/null; then
+    KUBE_RESOURCE_FOUND="Persistent disk ${CLUSTER_REGISTRY_DISK}"
+    return 1
+  fi
+
   # Find out what minions are running.
   local -a minions
   minions=( $(gcloud compute instances list \
@@ -1010,8 +1005,8 @@ function prepare-push() {
   detect-project
   detect-master
   detect-minion-names
-  get-password
-  get-bearer-token
+  get-kubeconfig-basicauth
+  get-kubeconfig-bearertoken
 
   # Make sure we have the tar files staged on Google Storage
   tars_from_version
@@ -1020,7 +1015,7 @@ function prepare-push() {
   if [[ "${1-}" == "true" ]]; then
     write-node-env
 
-    # TODO(mbforbes): Refactor setting scope flags.
+    # TODO(zmerlynn): Refactor setting scope flags.
     local scope_flags=
     if [ -n "${MINION_SCOPES}" ]; then
       scope_flags="--scopes ${MINION_SCOPES}"

@@ -51,13 +51,13 @@ kubectl expose (-f FILENAME | TYPE NAME) --port=port [--protocol=TCP|UDP] [--tar
 ### Examples
 
 ```
-# Creates a service for a replicated nginx, which serves on port 80 and connects to the containers on port 8000.
+# Create a service for a replicated nginx, which serves on port 80 and connects to the containers on port 8000.
 $ kubectl expose rc nginx --port=80 --target-port=8000
 
-# Creates a service for a replication controller identified by type and name specified in "nginx-controller.yaml", which serves on port 80 and connects to the containers on port 8000.
+# Create a service for a replication controller identified by type and name specified in "nginx-controller.yaml", which serves on port 80 and connects to the containers on port 8000.
 $ kubectl expose -f nginx-controller.yaml --port=80 --target-port=8000
 
-# Creates a second service based on the above service, exposing the container port 8443 as port 443 with the name "nginx-https"
+# Create a second service based on the above service, exposing the container port 8443 as port 443 with the name "nginx-https"
 $ kubectl expose service nginx --port=443 --target-port=8443 --name=nginx-https
 
 # Create a service for a replicated streaming application on port 4100 balancing UDP traffic and named 'video-stream'.
@@ -68,16 +68,14 @@ $ kubectl expose rc streamer --port=4100 --protocol=udp --name=video-stream
 
 ```
       --container-port="": Synonym for --target-port
-      --create-external-load-balancer[=false]: If true, create an external load balancer for this service (trumped by --type). Implementation is cloud provider dependent. Default is 'false'.
       --dry-run[=false]: If true, only print the object that would be sent, without creating it.
       --external-ip="": External IP address to set for the service. The service can be accessed by this IP in addition to its generated service IP.
   -f, --filename=[]: Filename, directory, or URL to a file identifying the resource to expose a service
       --generator="service/v2": The name of the API generator to use. There are 2 generators: 'service/v1' and 'service/v2'. The only difference between them is that service port in v1 is named 'default', while it is left unnamed in v2. Default is 'service/v2'.
-  -h, --help[=false]: help for expose
   -l, --labels="": Labels to apply to the service created by this call.
       --name="": The name for the newly created object.
       --no-headers[=false]: When using the default output, don't print headers.
-  -o, --output="": Output format. One of: json|yaml|template|templatefile|wide|jsonpath.
+  -o, --output="": Output format. One of: json|yaml|template|templatefile|wide|jsonpath|name.
       --output-version="": Output the formatted object with the given version (default api-version).
       --overrides="": An inline JSON override for the generated object. If this is non-empty, it is used to override the generated object. Requires that the object supply a valid apiVersion field.
       --port=-1: The port that the service should serve on. Copied from the resource being exposed, if unspecified
@@ -87,8 +85,8 @@ $ kubectl expose rc streamer --port=4100 --protocol=udp --name=video-stream
   -a, --show-all[=false]: When printing, show all resources (default hide terminated pods.)
       --sort-by="": If non-empty, sort list types using this field specification.  The field specification is expressed as a JSONPath expression (e.g. 'ObjectMeta.Name'). The field in the API resource specified by this JSONPath expression must be an integer or a string.
       --target-port="": Name or number for the port on the container that the service should direct traffic to. Optional.
-  -t, --template="": Template string or path to template file to use when -o=template, -o=templatefile or -o=jsonpath.  The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview]. The jsonpath template is composed of jsonpath expressions enclosed by {} [http://releases.k8s.io/HEAD/docs/user-guide/jsonpath.md]
-      --type="": Type for this service: ClusterIP, NodePort, or LoadBalancer. Default is 'ClusterIP' unless --create-external-load-balancer is specified.
+      --template="": Template string or path to template file to use when -o=template, -o=templatefile or -o=jsonpath.  The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview]. The jsonpath template is composed of jsonpath expressions enclosed by {} [http://releases.k8s.io/HEAD/docs/user-guide/jsonpath.md]
+      --type="": Type for this service: ClusterIP, NodePort, or LoadBalancer. Default is 'ClusterIP'.
 ```
 
 ### Options inherited from parent commands
@@ -116,7 +114,6 @@ $ kubectl expose rc streamer --port=4100 --protocol=udp --name=video-stream
       --user="": The name of the kubeconfig user to use
       --username="": Username for basic authentication to the API server.
       --v=0: log level for V logs
-      --validate[=false]: If true, use a schema to validate the input before sending it
       --vmodule=: comma-separated list of pattern=N settings for file-filtered logging
 ```
 
@@ -124,7 +121,7 @@ $ kubectl expose rc streamer --port=4100 --protocol=udp --name=video-stream
 
 * [kubectl](kubectl.md)	 - kubectl controls the Kubernetes cluster manager
 
-###### Auto generated by spf13/cobra at 2015-08-20 23:09:42.260392956 +0000 UTC
+###### Auto generated by spf13/cobra at 2015-09-03 21:06:22.473647619 +0000 UTC
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/docs/user-guide/kubectl/kubectl_expose.md?pixel)]()

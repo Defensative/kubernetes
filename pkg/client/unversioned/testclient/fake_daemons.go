@@ -17,8 +17,8 @@ limitations under the License.
 package testclient
 
 import (
-	"k8s.io/kubernetes/pkg/api"
 	kClientLib "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/expapi"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/watch"
@@ -27,48 +27,50 @@ import (
 // FakeDaemons implements DaemonInterface. Meant to be embedded into a struct to get a default
 // implementation. This makes faking out just the method you want to test easier.
 type FakeDaemons struct {
-	Fake      *Fake
+	Fake      *FakeExperimental
 	Namespace string
 }
-
-const (
-	GetDaemonAction    = "get-daemon"
-	UpdateDaemonAction = "update-daemon"
-	WatchDaemonAction  = "watch-daemon"
-	DeleteDaemonAction = "delete-daemon"
-	ListDaemonAction   = "list-daemons"
-	CreateDaemonAction = "create-daemon"
-)
 
 // Ensure statically that FakeDaemons implements DaemonInterface.
 var _ kClientLib.DaemonInterface = &FakeDaemons{}
 
-func (c *FakeDaemons) Get(name string) (*api.Daemon, error) {
-	obj, err := c.Fake.Invokes(NewGetAction("daemons", c.Namespace, name), &api.Daemon{})
-	return obj.(*api.Daemon), err
+func (c *FakeDaemons) Get(name string) (*expapi.Daemon, error) {
+	obj, err := c.Fake.Invokes(NewGetAction("daemons", c.Namespace, name), &expapi.Daemon{})
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*expapi.Daemon), err
 }
 
-func (c *FakeDaemons) List(label labels.Selector) (*api.DaemonList, error) {
-	obj, err := c.Fake.Invokes(NewListAction("daemons", c.Namespace, label, nil), &api.DaemonList{})
-	return obj.(*api.DaemonList), err
+func (c *FakeDaemons) List(label labels.Selector) (*expapi.DaemonList, error) {
+	obj, err := c.Fake.Invokes(NewListAction("daemons", c.Namespace, label, nil), &expapi.DaemonList{})
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*expapi.DaemonList), err
 }
 
-func (c *FakeDaemons) Create(daemon *api.Daemon) (*api.Daemon, error) {
-	obj, err := c.Fake.Invokes(NewCreateAction("daemons", c.Namespace, daemon), &api.Daemon{})
-	return obj.(*api.Daemon), err
+func (c *FakeDaemons) Create(daemon *expapi.Daemon) (*expapi.Daemon, error) {
+	obj, err := c.Fake.Invokes(NewCreateAction("daemons", c.Namespace, daemon), &expapi.Daemon{})
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*expapi.Daemon), err
 }
 
-func (c *FakeDaemons) Update(daemon *api.Daemon) (*api.Daemon, error) {
-	obj, err := c.Fake.Invokes(NewUpdateAction("daemons", c.Namespace, daemon), &api.Daemon{})
-	return obj.(*api.Daemon), err
+func (c *FakeDaemons) Update(daemon *expapi.Daemon) (*expapi.Daemon, error) {
+	obj, err := c.Fake.Invokes(NewUpdateAction("daemons", c.Namespace, daemon), &expapi.Daemon{})
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*expapi.Daemon), err
 }
 
 func (c *FakeDaemons) Delete(name string) error {
-	_, err := c.Fake.Invokes(NewDeleteAction("daemons", c.Namespace, name), &api.Daemon{})
+	_, err := c.Fake.Invokes(NewDeleteAction("daemons", c.Namespace, name), &expapi.Daemon{})
 	return err
 }
 
 func (c *FakeDaemons) Watch(label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
-	c.Fake.Invokes(NewWatchAction("daemons", c.Namespace, label, field, resourceVersion), nil)
-	return c.Fake.Watch, nil
+	return c.Fake.InvokesWatch(NewWatchAction("daemons", c.Namespace, label, field, resourceVersion))
 }

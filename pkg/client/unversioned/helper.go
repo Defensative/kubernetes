@@ -139,7 +139,12 @@ func New(c *Config) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{client}, nil
+	experimentalConfig := *c
+	experimentalClient, err := NewExperimental(&experimentalConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{RESTClient: client, ExperimentalClient: experimentalClient}, nil
 }
 
 // MatchesServerVersion queries the server to compares the build version
@@ -479,7 +484,7 @@ func DefaultServerURL(host, prefix, version string, defaultTLS bool) (*url.URL, 
 			return nil, err
 		}
 		if hostURL.Path != "" && hostURL.Path != "/" {
-			return nil, fmt.Errorf("host must be a URL or a host:port pair: %s", base)
+			return nil, fmt.Errorf("host must be a URL or a host:port pair: %q", base)
 		}
 	}
 

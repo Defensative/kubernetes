@@ -153,6 +153,7 @@ function create-provision-scripts {
     echo "KUBELET_TOKEN='${KUBELET_TOKEN:-}'"
     echo "KUBE_PROXY_TOKEN='${KUBE_PROXY_TOKEN:-}'"
     echo "MASTER_EXTRA_SANS='${MASTER_EXTRA_SANS:-}'"
+    echo "ENABLE_CPU_CFS_QUOTA='${ENABLE_CPU_CFS_QUOTA}'"
     awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-network.sh"
     awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-master.sh"
   ) > "${KUBE_TEMP}/master-start.sh"
@@ -237,7 +238,7 @@ function verify-cluster {
     local count="0"
     until [[ "$count" == "1" ]]; do
       local minions
-      minions=$("${KUBE_ROOT}/cluster/kubectl.sh" get nodes -o template -t '{{range.items}}{{.metadata.name}}:{{end}}' --api-version=v1)
+      minions=$("${KUBE_ROOT}/cluster/kubectl.sh" get nodes -o template --template '{{range.items}}{{.metadata.name}}:{{end}}' --api-version=v1)
       count=$(echo $minions | grep -c "${MINION_IPS[i]}") || {
         printf "."
         sleep 2
@@ -253,19 +254,21 @@ function verify-cluster {
   }
 
   (
+    # ensures KUBECONFIG is set
+    get-kubeconfig-basicauth
     echo
     echo "Kubernetes cluster is running.  The master is running at:"
     echo
     echo "  https://${MASTER_IP}"
     echo
-    echo "The user name and password to use is located in ~/.kubernetes_vagrant_auth."
+    echo "The user name and password to use is located in ${KUBECONFIG}"
     echo
     )
 }
 
 # Instantiate a kubernetes cluster
 function kube-up {
-  get-password
+  gen-kube-basicauth
   get-tokens
   create-provision-scripts
 
@@ -295,7 +298,7 @@ function kube-down {
 
 # Update a kubernetes cluster with latest source
 function kube-push {
-  get-password
+  get-kubeconfig-basicauth
   create-provision-scripts
   vagrant provision
 }
@@ -314,13 +317,6 @@ function test-setup {
 # Execute after running tests to perform any required clean-up
 function test-teardown {
   kube-down
-}
-
-# Set the {user} and {password} environment values required to interact with provider
-function get-password {
-  export KUBE_USER=vagrant
-  export KUBE_PASSWORD=vagrant
-  echo "Using credentials: $KUBE_USER:$KUBE_PASSWORD" 1>&2
 }
 
 # Find the minion name based on the IP address

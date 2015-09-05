@@ -1,5 +1,6 @@
 accept-hosts
 accept-paths
+account-for-pod-resources
 admission-control
 admission-control-config-file
 advertise-address
@@ -28,9 +29,9 @@ bind-pods-qps
 cadvisor-port
 cert-dir
 certificate-authority
-cgroup-prefix
 cgroup-root
 chaos-chance
+cleanup-iptables
 client-ca-file
 client-certificate
 client-key
@@ -43,6 +44,7 @@ cluster-name
 cluster-tag
 concurrent-endpoint-syncs
 configure-cbr0
+contain-pod-resources
 container-port
 container-runtime
 cors-allowed-origins
@@ -59,11 +61,13 @@ dest-file
 disable-filter
 docker-endpoint
 docker-exec-handler
+dockercfg-path
 driver-port
 dry-run
 duration-sec
 e2e-output-dir
 enable-debugging-handlers
+enable-horizontal-pod-autoscaler
 enable-server
 etcd-config
 etcd-prefix
@@ -71,7 +75,6 @@ etcd-server
 etcd-servers
 event-ttl
 executor-bindall
-executor-cgroup-prefix
 executor-logv
 executor-path
 executor-suicide-timeout
@@ -95,6 +98,7 @@ grace-period
 ha-domain
 healthz-bind-address
 healthz-port
+horizontal-pod-autoscaler-sync-period
 hostname-override
 host-network-sources
 http-check-frequency
@@ -106,6 +110,11 @@ insecure-bind-address
 insecure-port
 insecure-skip-tls-verify
 iptables-sync-period
+ir-data-source
+ir-dbname
+ir-influxdb-host
+ir-password
+ir-user
 jenkins-host
 jenkins-jobs
 km-path
@@ -148,6 +157,7 @@ max-requests-inflight
 mesos-authentication-principal
 mesos-authentication-provider
 mesos-authentication-secret-file
+mesos-cgroup-prefix
 mesos-master
 mesos-role
 mesos-user
@@ -155,6 +165,7 @@ minimum-container-ttl-duration
 minion-max-log-age
 minion-max-log-backups
 minion-max-log-size
+minion-path-override
 min-pr-number
 min-request-timeout
 namespace-sync-period
@@ -168,9 +179,14 @@ node-status-update-frequency
 node-sync-period
 no-headers
 num-nodes
+oidc-ca-file
+oidc-client-id
+oidc-issuer-url
+oidc-username-claim
 oom-score-adj
 output-version
 out-version
+path-override
 pod-cidr
 pod-eviction-timeout
 pod-infra-container-image
@@ -197,6 +213,7 @@ reject-paths
 repo-root
 report-dir
 required-contexts
+resolv-conf
 resource-container
 resource-quota-sync-period
 resource-version
@@ -237,11 +254,16 @@ tls-cert-file
 tls-private-key-file
 token-auth-file
 ttl-secs
+type-src
 unix-socket
 update-period
 upgrade-target
 use-kubernetes-cluster-service
 user-whitelist
+watch-cache
 watch-only
 whitelist-override-label
 www-prefix
+retry_time
+file_content_in_loop
+cpu-cfs-quota

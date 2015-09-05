@@ -34,7 +34,6 @@ import (
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/types"
 	"k8s.io/kubernetes/pkg/util"
-	"k8s.io/kubernetes/pkg/volume"
 )
 
 // Describer generates output for the named resource or an error
@@ -82,8 +81,10 @@ func describerMap(c *client.Client) map[string]Describer {
 	return m
 }
 
-func expDescriberMap(c *client.ExperimentalClient) map[string]Describer {
-	return map[string]Describer{}
+func expDescriberMap(c *client.Client) map[string]Describer {
+	return map[string]Describer{
+		"HorizontalPodAutoscaler": &HorizontalPodAutoscalerDescriber{c},
+	}
 }
 
 // List of all resource types we can describe
@@ -99,14 +100,17 @@ func DescribableResources() []string {
 
 // Describer returns the default describe functions for each of the standard
 // Kubernetes types.
-func DescriberFor(kind string, c *client.Client, ec *client.ExperimentalClient) (Describer, bool) {
+func DescriberFor(group string, kind string, c *client.Client) (Describer, bool) {
 	var f Describer
 	var ok bool
-	if c != nil {
+
+	switch group {
+	case "api":
 		f, ok = describerMap(c)[kind]
-	} else if ec != nil {
-		f, ok = expDescriberMap(ec)[kind]
+	case "experimental":
+		f, ok = expDescriberMap(c)[kind]
 	}
+
 	return f, ok
 }
 
@@ -155,7 +159,7 @@ func (d *NamespaceDescriber) Describe(namespace, name string) (string, error) {
 func describeNamespace(namespace *api.Namespace, resourceQuotaList *api.ResourceQuotaList, limitRangeList *api.LimitRangeList) (string, error) {
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "Name:\t%s\n", namespace.Name)
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(namespace.Labels))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(namespace.Labels))
 		fmt.Fprintf(out, "Status:\t%s\n", string(namespace.Status.Phase))
 		if resourceQuotaList != nil {
 			fmt.Fprintf(out, "\n")
@@ -175,14 +179,16 @@ func DescribeLimitRanges(limitRanges *api.LimitRangeList, w io.Writer) {
 		fmt.Fprint(w, "No resource limits.\n")
 		return
 	}
-	fmt.Fprintf(w, "Resource Limits\n Type\tResource\tMin\tMax\tDefault\n")
-	fmt.Fprintf(w, " ----\t--------\t---\t---\t---\n")
+	fmt.Fprintf(w, "Resource Limits\n Type\tResource\tMin\tMax\tRequest\tLimit\tLimit/Request\n")
+	fmt.Fprintf(w, " ----\t--------\t---\t---\t-------\t-----\t-------------\n")
 	for _, limitRange := range limitRanges.Items {
 		for i := range limitRange.Spec.Limits {
 			item := limitRange.Spec.Limits[i]
 			maxResources := item.Max
 			minResources := item.Min
-			defaultResources := item.Default
+			defaultLimitResources := item.Default
+			defaultRequestResources := item.DefaultRequest
+			ratio := item.MaxLimitRequestRatio
 
 			set := map[api.ResourceName]bool{}
 			for k := range maxResources {
@@ -191,7 +197,13 @@ func DescribeLimitRanges(limitRanges *api.LimitRangeList, w io.Writer) {
 			for k := range minResources {
 				set[k] = true
 			}
-			for k := range defaultResources {
+			for k := range defaultLimitResources {
+				set[k] = true
+			}
+			for k := range defaultRequestResources {
+				set[k] = true
+			}
+			for k := range ratio {
 				set[k] = true
 			}
 
@@ -199,7 +211,9 @@ func DescribeLimitRanges(limitRanges *api.LimitRangeList, w io.Writer) {
 				// if no value is set, we output -
 				maxValue := "-"
 				minValue := "-"
-				defaultValue := "-"
+				defaultLimitValue := "-"
+				defaultRequestValue := "-"
+				ratioValue := "-"
 
 				maxQuantity, maxQuantityFound := maxResources[k]
 				if maxQuantityFound {
@@ -211,13 +225,23 @@ func DescribeLimitRanges(limitRanges *api.LimitRangeList, w io.Writer) {
 					minValue = minQuantity.String()
 				}
 
-				defaultQuantity, defaultQuantityFound := defaultResources[k]
-				if defaultQuantityFound {
-					defaultValue = defaultQuantity.String()
+				defaultLimitQuantity, defaultLimitQuantityFound := defaultLimitResources[k]
+				if defaultLimitQuantityFound {
+					defaultLimitValue = defaultLimitQuantity.String()
 				}
 
-				msg := " %v\t%v\t%v\t%v\t%v\n"
-				fmt.Fprintf(w, msg, item.Type, k, minValue, maxValue, defaultValue)
+				defaultRequestQuantity, defaultRequestQuantityFound := defaultRequestResources[k]
+				if defaultRequestQuantityFound {
+					defaultRequestValue = defaultRequestQuantity.String()
+				}
+
+				ratioQuantity, ratioQuantityFound := ratio[k]
+				if ratioQuantityFound {
+					ratioValue = ratioQuantity.String()
+				}
+
+				msg := " %s\t%v\t%v\t%v\t%v\t%v\t%v\n"
+				fmt.Fprintf(w, msg, item.Type, k, minValue, maxValue, defaultRequestValue, defaultLimitValue, ratioValue)
 			}
 		}
 	}
@@ -280,13 +304,15 @@ func describeLimitRange(limitRange *api.LimitRange) (string, error) {
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "Name:\t%s\n", limitRange.Name)
 		fmt.Fprintf(out, "Namespace:\t%s\n", limitRange.Namespace)
-		fmt.Fprintf(out, "Type\tResource\tMin\tMax\tDefault\n")
-		fmt.Fprintf(out, "----\t--------\t---\t---\t---\n")
+		fmt.Fprintf(out, "Type\tResource\tMin\tMax\tRequest\tLimit\tLimit/Request\n")
+		fmt.Fprintf(out, "----\t--------\t---\t---\t-------\t-----\t-------------\n")
 		for i := range limitRange.Spec.Limits {
 			item := limitRange.Spec.Limits[i]
 			maxResources := item.Max
 			minResources := item.Min
-			defaultResources := item.Default
+			defaultLimitResources := item.Default
+			defaultRequestResources := item.DefaultRequest
+			ratio := item.MaxLimitRequestRatio
 
 			set := map[api.ResourceName]bool{}
 			for k := range maxResources {
@@ -295,7 +321,13 @@ func describeLimitRange(limitRange *api.LimitRange) (string, error) {
 			for k := range minResources {
 				set[k] = true
 			}
-			for k := range defaultResources {
+			for k := range defaultLimitResources {
+				set[k] = true
+			}
+			for k := range defaultRequestResources {
+				set[k] = true
+			}
+			for k := range ratio {
 				set[k] = true
 			}
 
@@ -303,7 +335,9 @@ func describeLimitRange(limitRange *api.LimitRange) (string, error) {
 				// if no value is set, we output -
 				maxValue := "-"
 				minValue := "-"
-				defaultValue := "-"
+				defaultLimitValue := "-"
+				defaultRequestValue := "-"
+				ratioValue := "-"
 
 				maxQuantity, maxQuantityFound := maxResources[k]
 				if maxQuantityFound {
@@ -315,13 +349,23 @@ func describeLimitRange(limitRange *api.LimitRange) (string, error) {
 					minValue = minQuantity.String()
 				}
 
-				defaultQuantity, defaultQuantityFound := defaultResources[k]
-				if defaultQuantityFound {
-					defaultValue = defaultQuantity.String()
+				defaultLimitQuantity, defaultLimitQuantityFound := defaultLimitResources[k]
+				if defaultLimitQuantityFound {
+					defaultLimitValue = defaultLimitQuantity.String()
 				}
 
-				msg := "%v\t%v\t%v\t%v\t%v\n"
-				fmt.Fprintf(out, msg, item.Type, k, minValue, maxValue, defaultValue)
+				defaultRequestQuantity, defaultRequestQuantityFound := defaultRequestResources[k]
+				if defaultRequestQuantityFound {
+					defaultRequestValue = defaultRequestQuantity.String()
+				}
+
+				ratioQuantity, ratioQuantityFound := ratio[k]
+				if ratioQuantityFound {
+					ratioValue = ratioQuantity.String()
+				}
+
+				msg := "%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+				fmt.Fprintf(out, msg, item.Type, k, minValue, maxValue, defaultRequestValue, defaultLimitValue, ratioValue)
 			}
 		}
 		return nil
@@ -416,7 +460,7 @@ func describePod(pod *api.Pod, rcs []api.ReplicationController, events *api.Even
 		fmt.Fprintf(out, "Namespace:\t%s\n", pod.Namespace)
 		fmt.Fprintf(out, "Image(s):\t%s\n", makeImageList(&pod.Spec))
 		fmt.Fprintf(out, "Node:\t%s\n", pod.Spec.NodeName+"/"+pod.Status.HostIP)
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(pod.Labels))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(pod.Labels))
 		if pod.DeletionTimestamp != nil {
 			fmt.Fprintf(out, "Status:\tTerminating (expires %s)\n", pod.DeletionTimestamp.Time.Format(time.RFC1123Z))
 			fmt.Fprintf(out, "Termination Grace Period:\t%ds\n", pod.DeletionGracePeriodSeconds)
@@ -584,7 +628,7 @@ func (d *PersistentVolumeDescriber) Describe(namespace, name string) (string, er
 
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "Name:\t%s\n", pv.Name)
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(pv.Labels))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(pv.Labels))
 		fmt.Fprintf(out, "Status:\t%s\n", pv.Status.Phase)
 		if pv.Spec.ClaimRef != nil {
 			fmt.Fprintf(out, "Claim:\t%s\n", pv.Spec.ClaimRef.Namespace+"/"+pv.Spec.ClaimRef.Name)
@@ -592,9 +636,28 @@ func (d *PersistentVolumeDescriber) Describe(namespace, name string) (string, er
 			fmt.Fprintf(out, "Claim:\t%s\n", "")
 		}
 		fmt.Fprintf(out, "Reclaim Policy:\t%v\n", pv.Spec.PersistentVolumeReclaimPolicy)
-		fmt.Fprintf(out, "Access Modes:\t%s\n", volume.GetAccessModesAsString(pv.Spec.AccessModes))
+		fmt.Fprintf(out, "Access Modes:\t%s\n", api.GetAccessModesAsString(pv.Spec.AccessModes))
 		fmt.Fprintf(out, "Capacity:\t%s\n", storage.String())
 		fmt.Fprintf(out, "Message:\t%s\n", pv.Status.Message)
+		fmt.Fprintf(out, "Source:\n")
+
+		switch {
+		case pv.Spec.HostPath != nil:
+			printHostPathVolumeSource(pv.Spec.HostPath, out)
+		case pv.Spec.GCEPersistentDisk != nil:
+			printGCEPersistentDiskVolumeSource(pv.Spec.GCEPersistentDisk, out)
+		case pv.Spec.AWSElasticBlockStore != nil:
+			printAWSElasticBlockStoreVolumeSource(pv.Spec.AWSElasticBlockStore, out)
+		case pv.Spec.NFS != nil:
+			printNFSVolumeSource(pv.Spec.NFS, out)
+		case pv.Spec.ISCSI != nil:
+			printISCSIVolumeSource(pv.Spec.ISCSI, out)
+		case pv.Spec.Glusterfs != nil:
+			printGlusterfsVolumeSource(pv.Spec.Glusterfs, out)
+		case pv.Spec.RBD != nil:
+			printRBDVolumeSource(pv.Spec.RBD, out)
+		}
+
 		return nil
 	})
 }
@@ -611,12 +674,12 @@ func (d *PersistentVolumeClaimDescriber) Describe(namespace, name string) (strin
 		return "", err
 	}
 
-	labels := formatLabels(pvc.Labels)
+	labels := labels.FormatLabels(pvc.Labels)
 	storage := pvc.Spec.Resources.Requests[api.ResourceStorage]
 	capacity := ""
 	accessModes := ""
 	if pvc.Spec.VolumeName != "" {
-		accessModes = volume.GetAccessModesAsString(pvc.Status.AccessModes)
+		accessModes = api.GetAccessModesAsString(pvc.Status.AccessModes)
 		storage = pvc.Status.Capacity[api.ResourceStorage]
 		capacity = storage.String()
 	}
@@ -659,7 +722,7 @@ func describeContainers(pod *api.Pod, out io.Writer) {
 		}
 		fmt.Fprintf(out, "    Ready:\t%v\n", printBool(status.Ready))
 		fmt.Fprintf(out, "    Restart Count:\t%d\n", status.RestartCount)
-		fmt.Fprintf(out, "    Variables:\n")
+		fmt.Fprintf(out, "    Environment Variables:\n")
 		for _, e := range container.Env {
 			if e.ValueFrom != nil && e.ValueFrom.FieldRef != nil {
 				valueFrom := envValueFrom(pod, e)
@@ -756,8 +819,8 @@ func describeReplicationController(controller *api.ReplicationController, events
 		} else {
 			fmt.Fprintf(out, "Image(s):\t%s\n", "<no template>")
 		}
-		fmt.Fprintf(out, "Selector:\t%s\n", formatLabels(controller.Spec.Selector))
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(controller.Labels))
+		fmt.Fprintf(out, "Selector:\t%s\n", labels.FormatLabels(controller.Spec.Selector))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(controller.Labels))
 		fmt.Fprintf(out, "Replicas:\t%d current / %d desired\n", controller.Status.Replicas, controller.Spec.Replicas)
 		fmt.Fprintf(out, "Pods Status:\t%d Running / %d Waiting / %d Succeeded / %d Failed\n", running, waiting, succeeded, failed)
 		if controller.Spec.Template != nil {
@@ -790,8 +853,8 @@ func describeSecret(secret *api.Secret) (string, error) {
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "Name:\t%s\n", secret.Name)
 		fmt.Fprintf(out, "Namespace:\t%s\n", secret.Namespace)
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(secret.Labels))
-		fmt.Fprintf(out, "Annotations:\t%s\n", formatLabels(secret.Annotations))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(secret.Labels))
+		fmt.Fprintf(out, "Annotations:\t%s\n", labels.FormatLabels(secret.Annotations))
 
 		fmt.Fprintf(out, "\nType:\t%s\n", secret.Type)
 
@@ -851,8 +914,8 @@ func describeService(service *api.Service, endpoints *api.Endpoints, events *api
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "Name:\t%s\n", service.Name)
 		fmt.Fprintf(out, "Namespace:\t%s\n", service.Namespace)
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(service.Labels))
-		fmt.Fprintf(out, "Selector:\t%s\n", formatLabels(service.Spec.Selector))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(service.Labels))
+		fmt.Fprintf(out, "Selector:\t%s\n", labels.FormatLabels(service.Spec.Selector))
 		fmt.Fprintf(out, "Type:\t%s\n", service.Spec.Type)
 		fmt.Fprintf(out, "IP:\t%s\n", service.Spec.ClusterIP)
 		if len(service.Status.LoadBalancer.Ingress) > 0 {
@@ -914,7 +977,7 @@ func describeServiceAccount(serviceAccount *api.ServiceAccount, tokens []api.Sec
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "Name:\t%s\n", serviceAccount.Name)
 		fmt.Fprintf(out, "Namespace:\t%s\n", serviceAccount.Namespace)
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(serviceAccount.Labels))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(serviceAccount.Labels))
 		fmt.Fprintln(out)
 
 		var (
@@ -1000,7 +1063,7 @@ func (d *NodeDescriber) Describe(namespace, name string) (string, error) {
 func describeNode(node *api.Node, pods []*api.Pod, events *api.EventList) (string, error) {
 	return tabbedString(func(out io.Writer) error {
 		fmt.Fprintf(out, "Name:\t%s\n", node.Name)
-		fmt.Fprintf(out, "Labels:\t%s\n", formatLabels(node.Labels))
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(node.Labels))
 		fmt.Fprintf(out, "CreationTimestamp:\t%s\n", node.CreationTimestamp.Time.Format(time.RFC1123Z))
 		if len(node.Status.Conditions) > 0 {
 			fmt.Fprint(out, "Conditions:\n  Type\tStatus\tLastHeartbeatTime\tLastTransitionTime\tReason\tMessage\n")
@@ -1080,6 +1143,55 @@ func describeNode(node *api.Node, pods []*api.Pod, events *api.EventList) (strin
 		fmt.Fprintf(out, "  Memory(bytes):\t\t%d (%d%% of total)\n", totalMemory, int64(fractionTotalMemory))
 		if events != nil {
 			DescribeEvents(events, out)
+		}
+		return nil
+	})
+}
+
+// HorizontalPodAutoscalerDescriber generates information about a horizontal pod autoscaler.
+type HorizontalPodAutoscalerDescriber struct {
+	client *client.Client
+}
+
+func (d *HorizontalPodAutoscalerDescriber) Describe(namespace, name string) (string, error) {
+	hpa, err := d.client.Experimental().HorizontalPodAutoscalers(namespace).Get(name)
+	if err != nil {
+		return "", err
+	}
+	return tabbedString(func(out io.Writer) error {
+		fmt.Fprintf(out, "Name:\t%s\n", hpa.Name)
+		fmt.Fprintf(out, "Namespace:\t%s\n", hpa.Namespace)
+		fmt.Fprintf(out, "Labels:\t%s\n", labels.FormatLabels(hpa.Labels))
+		fmt.Fprintf(out, "CreationTimestamp:\t%s\n", hpa.CreationTimestamp.Time.Format(time.RFC1123Z))
+		fmt.Fprintf(out, "Reference:\t%s/%s/%s/%s\n",
+			hpa.Spec.ScaleRef.Kind,
+			hpa.Spec.ScaleRef.Namespace,
+			hpa.Spec.ScaleRef.Name,
+			hpa.Spec.ScaleRef.Subresource)
+		fmt.Fprintf(out, "Target resource consumption:\t%s %s\n",
+			hpa.Spec.Target.Quantity.String(),
+			hpa.Spec.Target.Resource)
+		fmt.Fprintf(out, "Current resource consumption:\t")
+
+		if hpa.Status != nil && hpa.Status.CurrentConsumption != nil {
+			fmt.Fprintf(out, "%s %s\n",
+				hpa.Status.CurrentConsumption.Quantity.String(),
+				hpa.Status.CurrentConsumption.Resource)
+		} else {
+			fmt.Fprintf(out, "<not available>\n")
+		}
+		fmt.Fprintf(out, "Min pods:\t%d\n", hpa.Spec.MinCount)
+		fmt.Fprintf(out, "Max pods:\t%d\n", hpa.Spec.MaxCount)
+
+		// TODO: switch to scale subresource once the required code is submitted.
+		if strings.ToLower(hpa.Spec.ScaleRef.Kind) == "replicationcontroller" {
+			fmt.Fprintf(out, "ReplicationController pods:\t")
+			rc, err := d.client.ReplicationControllers(hpa.Spec.ScaleRef.Namespace).Get(hpa.Spec.ScaleRef.Name)
+			if err == nil {
+				fmt.Fprintf(out, "%d current / %d desired\n", rc.Status.Replicas, rc.Spec.Replicas)
+			} else {
+				fmt.Fprintf(out, "failed to check Replication Controller\n")
+			}
 		}
 		return nil
 	})

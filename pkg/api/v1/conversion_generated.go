@@ -26,15 +26,6 @@ import (
 	conversion "k8s.io/kubernetes/pkg/conversion"
 )
 
-func convert_api_APIVersion_To_v1_APIVersion(in *api.APIVersion, out *APIVersion, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.APIVersion))(in)
-	}
-	out.Name = in.Name
-	out.APIGroup = in.APIGroup
-	return nil
-}
-
 func convert_api_AWSElasticBlockStoreVolumeSource_To_v1_AWSElasticBlockStoreVolumeSource(in *api.AWSElasticBlockStoreVolumeSource, out *AWSElasticBlockStoreVolumeSource, s conversion.Scope) error {
 	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
 		defaulting.(func(*api.AWSElasticBlockStoreVolumeSource))(in)
@@ -82,6 +73,42 @@ func convert_api_Capabilities_To_v1_Capabilities(in *api.Capabilities, out *Capa
 	} else {
 		out.Drop = nil
 	}
+	return nil
+}
+
+func convert_api_CephFSVolumeSource_To_v1_CephFSVolumeSource(in *api.CephFSVolumeSource, out *CephFSVolumeSource, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*api.CephFSVolumeSource))(in)
+	}
+	if in.Monitors != nil {
+		out.Monitors = make([]string, len(in.Monitors))
+		for i := range in.Monitors {
+			out.Monitors[i] = in.Monitors[i]
+		}
+	} else {
+		out.Monitors = nil
+	}
+	out.User = in.User
+	out.SecretFile = in.SecretFile
+	if in.SecretRef != nil {
+		out.SecretRef = new(LocalObjectReference)
+		if err := convert_api_LocalObjectReference_To_v1_LocalObjectReference(in.SecretRef, out.SecretRef, s); err != nil {
+			return err
+		}
+	} else {
+		out.SecretRef = nil
+	}
+	out.ReadOnly = in.ReadOnly
+	return nil
+}
+
+func convert_api_CinderVolumeSource_To_v1_CinderVolumeSource(in *api.CinderVolumeSource, out *CinderVolumeSource, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*api.CinderVolumeSource))(in)
+	}
+	out.VolumeID = in.VolumeID
+	out.FSType = in.FSType
+	out.ReadOnly = in.ReadOnly
 	return nil
 }
 
@@ -335,81 +362,6 @@ func convert_api_ContainerStatus_To_v1_ContainerStatus(in *api.ContainerStatus, 
 	return nil
 }
 
-func convert_api_Daemon_To_v1_Daemon(in *api.Daemon, out *Daemon, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.Daemon))(in)
-	}
-	if err := convert_api_TypeMeta_To_v1_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_api_ObjectMeta_To_v1_ObjectMeta(&in.ObjectMeta, &out.ObjectMeta, s); err != nil {
-		return err
-	}
-	if err := convert_api_DaemonSpec_To_v1_DaemonSpec(&in.Spec, &out.Spec, s); err != nil {
-		return err
-	}
-	if err := convert_api_DaemonStatus_To_v1_DaemonStatus(&in.Status, &out.Status, s); err != nil {
-		return err
-	}
-	return nil
-}
-
-func convert_api_DaemonList_To_v1_DaemonList(in *api.DaemonList, out *DaemonList, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.DaemonList))(in)
-	}
-	if err := convert_api_TypeMeta_To_v1_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_api_ListMeta_To_v1_ListMeta(&in.ListMeta, &out.ListMeta, s); err != nil {
-		return err
-	}
-	if in.Items != nil {
-		out.Items = make([]Daemon, len(in.Items))
-		for i := range in.Items {
-			if err := convert_api_Daemon_To_v1_Daemon(&in.Items[i], &out.Items[i], s); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Items = nil
-	}
-	return nil
-}
-
-func convert_api_DaemonSpec_To_v1_DaemonSpec(in *api.DaemonSpec, out *DaemonSpec, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.DaemonSpec))(in)
-	}
-	if in.Selector != nil {
-		out.Selector = make(map[string]string)
-		for key, val := range in.Selector {
-			out.Selector[key] = val
-		}
-	} else {
-		out.Selector = nil
-	}
-	if in.Template != nil {
-		out.Template = new(PodTemplateSpec)
-		if err := convert_api_PodTemplateSpec_To_v1_PodTemplateSpec(in.Template, out.Template, s); err != nil {
-			return err
-		}
-	} else {
-		out.Template = nil
-	}
-	return nil
-}
-
-func convert_api_DaemonStatus_To_v1_DaemonStatus(in *api.DaemonStatus, out *DaemonStatus, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.DaemonStatus))(in)
-	}
-	out.CurrentNumberScheduled = in.CurrentNumberScheduled
-	out.NumberMisscheduled = in.NumberMisscheduled
-	out.DesiredNumberScheduled = in.DesiredNumberScheduled
-	return nil
-}
-
 func convert_api_DeleteOptions_To_v1_DeleteOptions(in *api.DeleteOptions, out *DeleteOptions, s conversion.Scope) error {
 	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
 		defaulting.(func(*api.DeleteOptions))(in)
@@ -422,6 +374,34 @@ func convert_api_DeleteOptions_To_v1_DeleteOptions(in *api.DeleteOptions, out *D
 		*out.GracePeriodSeconds = *in.GracePeriodSeconds
 	} else {
 		out.GracePeriodSeconds = nil
+	}
+	return nil
+}
+
+func convert_api_DownwardAPIVolumeFile_To_v1_DownwardAPIVolumeFile(in *api.DownwardAPIVolumeFile, out *DownwardAPIVolumeFile, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*api.DownwardAPIVolumeFile))(in)
+	}
+	out.Path = in.Path
+	if err := convert_api_ObjectFieldSelector_To_v1_ObjectFieldSelector(&in.FieldRef, &out.FieldRef, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+func convert_api_DownwardAPIVolumeSource_To_v1_DownwardAPIVolumeSource(in *api.DownwardAPIVolumeSource, out *DownwardAPIVolumeSource, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*api.DownwardAPIVolumeSource))(in)
+	}
+	if in.Items != nil {
+		out.Items = make([]DownwardAPIVolumeFile, len(in.Items))
+		for i := range in.Items {
+			if err := convert_api_DownwardAPIVolumeFile_To_v1_DownwardAPIVolumeFile(&in.Items[i], &out.Items[i], s); err != nil {
+				return err
+			}
+		}
+	} else {
+		out.Items = nil
 	}
 	return nil
 }
@@ -813,6 +793,30 @@ func convert_api_LimitRangeItem_To_v1_LimitRangeItem(in *api.LimitRangeItem, out
 		}
 	} else {
 		out.Default = nil
+	}
+	if in.DefaultRequest != nil {
+		out.DefaultRequest = make(ResourceList)
+		for key, val := range in.DefaultRequest {
+			newVal := resource.Quantity{}
+			if err := s.Convert(&val, &newVal, 0); err != nil {
+				return err
+			}
+			out.DefaultRequest[ResourceName(key)] = newVal
+		}
+	} else {
+		out.DefaultRequest = nil
+	}
+	if in.MaxLimitRequestRatio != nil {
+		out.MaxLimitRequestRatio = make(ResourceList)
+		for key, val := range in.MaxLimitRequestRatio {
+			newVal := resource.Quantity{}
+			if err := s.Convert(&val, &newVal, 0); err != nil {
+				return err
+			}
+			out.MaxLimitRequestRatio[ResourceName(key)] = newVal
+		}
+	} else {
+		out.MaxLimitRequestRatio = nil
 	}
 	return nil
 }
@@ -1414,6 +1418,22 @@ func convert_api_PersistentVolumeSource_To_v1_PersistentVolumeSource(in *api.Per
 		}
 	} else {
 		out.ISCSI = nil
+	}
+	if in.Cinder != nil {
+		out.Cinder = new(CinderVolumeSource)
+		if err := convert_api_CinderVolumeSource_To_v1_CinderVolumeSource(in.Cinder, out.Cinder, s); err != nil {
+			return err
+		}
+	} else {
+		out.Cinder = nil
+	}
+	if in.CephFS != nil {
+		out.CephFS = new(CephFSVolumeSource)
+		if err := convert_api_CephFSVolumeSource_To_v1_CephFSVolumeSource(in.CephFS, out.CephFS, s); err != nil {
+			return err
+		}
+	} else {
+		out.CephFS = nil
 	}
 	return nil
 }
@@ -2259,69 +2279,6 @@ func convert_api_TCPSocketAction_To_v1_TCPSocketAction(in *api.TCPSocketAction, 
 	return nil
 }
 
-func convert_api_ThirdPartyResource_To_v1_ThirdPartyResource(in *api.ThirdPartyResource, out *ThirdPartyResource, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.ThirdPartyResource))(in)
-	}
-	if err := convert_api_TypeMeta_To_v1_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_api_ObjectMeta_To_v1_ObjectMeta(&in.ObjectMeta, &out.ObjectMeta, s); err != nil {
-		return err
-	}
-	out.Description = in.Description
-	if in.Versions != nil {
-		out.Versions = make([]APIVersion, len(in.Versions))
-		for i := range in.Versions {
-			if err := convert_api_APIVersion_To_v1_APIVersion(&in.Versions[i], &out.Versions[i], s); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Versions = nil
-	}
-	return nil
-}
-
-func convert_api_ThirdPartyResourceData_To_v1_ThirdPartyResourceData(in *api.ThirdPartyResourceData, out *ThirdPartyResourceData, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.ThirdPartyResourceData))(in)
-	}
-	if err := convert_api_TypeMeta_To_v1_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_api_ObjectMeta_To_v1_ObjectMeta(&in.ObjectMeta, &out.ObjectMeta, s); err != nil {
-		return err
-	}
-	if err := s.Convert(&in.Data, &out.Data, 0); err != nil {
-		return err
-	}
-	return nil
-}
-
-func convert_api_ThirdPartyResourceList_To_v1_ThirdPartyResourceList(in *api.ThirdPartyResourceList, out *ThirdPartyResourceList, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*api.ThirdPartyResourceList))(in)
-	}
-	if err := convert_api_TypeMeta_To_v1_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_api_ListMeta_To_v1_ListMeta(&in.ListMeta, &out.ListMeta, s); err != nil {
-		return err
-	}
-	if in.Items != nil {
-		out.Items = make([]ThirdPartyResource, len(in.Items))
-		for i := range in.Items {
-			if err := convert_api_ThirdPartyResource_To_v1_ThirdPartyResource(&in.Items[i], &out.Items[i], s); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Items = nil
-	}
-	return nil
-}
-
 func convert_api_TypeMeta_To_v1_TypeMeta(in *api.TypeMeta, out *TypeMeta, s conversion.Scope) error {
 	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
 		defaulting.(func(*api.TypeMeta))(in)
@@ -2444,15 +2401,30 @@ func convert_api_VolumeSource_To_v1_VolumeSource(in *api.VolumeSource, out *Volu
 	} else {
 		out.RBD = nil
 	}
-	return nil
-}
-
-func convert_v1_APIVersion_To_api_APIVersion(in *APIVersion, out *api.APIVersion, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*APIVersion))(in)
+	if in.Cinder != nil {
+		out.Cinder = new(CinderVolumeSource)
+		if err := convert_api_CinderVolumeSource_To_v1_CinderVolumeSource(in.Cinder, out.Cinder, s); err != nil {
+			return err
+		}
+	} else {
+		out.Cinder = nil
 	}
-	out.Name = in.Name
-	out.APIGroup = in.APIGroup
+	if in.CephFS != nil {
+		out.CephFS = new(CephFSVolumeSource)
+		if err := convert_api_CephFSVolumeSource_To_v1_CephFSVolumeSource(in.CephFS, out.CephFS, s); err != nil {
+			return err
+		}
+	} else {
+		out.CephFS = nil
+	}
+	if in.DownwardAPI != nil {
+		out.DownwardAPI = new(DownwardAPIVolumeSource)
+		if err := convert_api_DownwardAPIVolumeSource_To_v1_DownwardAPIVolumeSource(in.DownwardAPI, out.DownwardAPI, s); err != nil {
+			return err
+		}
+	} else {
+		out.DownwardAPI = nil
+	}
 	return nil
 }
 
@@ -2503,6 +2475,42 @@ func convert_v1_Capabilities_To_api_Capabilities(in *Capabilities, out *api.Capa
 	} else {
 		out.Drop = nil
 	}
+	return nil
+}
+
+func convert_v1_CephFSVolumeSource_To_api_CephFSVolumeSource(in *CephFSVolumeSource, out *api.CephFSVolumeSource, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*CephFSVolumeSource))(in)
+	}
+	if in.Monitors != nil {
+		out.Monitors = make([]string, len(in.Monitors))
+		for i := range in.Monitors {
+			out.Monitors[i] = in.Monitors[i]
+		}
+	} else {
+		out.Monitors = nil
+	}
+	out.User = in.User
+	out.SecretFile = in.SecretFile
+	if in.SecretRef != nil {
+		out.SecretRef = new(api.LocalObjectReference)
+		if err := convert_v1_LocalObjectReference_To_api_LocalObjectReference(in.SecretRef, out.SecretRef, s); err != nil {
+			return err
+		}
+	} else {
+		out.SecretRef = nil
+	}
+	out.ReadOnly = in.ReadOnly
+	return nil
+}
+
+func convert_v1_CinderVolumeSource_To_api_CinderVolumeSource(in *CinderVolumeSource, out *api.CinderVolumeSource, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*CinderVolumeSource))(in)
+	}
+	out.VolumeID = in.VolumeID
+	out.FSType = in.FSType
+	out.ReadOnly = in.ReadOnly
 	return nil
 }
 
@@ -2756,81 +2764,6 @@ func convert_v1_ContainerStatus_To_api_ContainerStatus(in *ContainerStatus, out 
 	return nil
 }
 
-func convert_v1_Daemon_To_api_Daemon(in *Daemon, out *api.Daemon, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*Daemon))(in)
-	}
-	if err := convert_v1_TypeMeta_To_api_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_v1_ObjectMeta_To_api_ObjectMeta(&in.ObjectMeta, &out.ObjectMeta, s); err != nil {
-		return err
-	}
-	if err := convert_v1_DaemonSpec_To_api_DaemonSpec(&in.Spec, &out.Spec, s); err != nil {
-		return err
-	}
-	if err := convert_v1_DaemonStatus_To_api_DaemonStatus(&in.Status, &out.Status, s); err != nil {
-		return err
-	}
-	return nil
-}
-
-func convert_v1_DaemonList_To_api_DaemonList(in *DaemonList, out *api.DaemonList, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*DaemonList))(in)
-	}
-	if err := convert_v1_TypeMeta_To_api_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_v1_ListMeta_To_api_ListMeta(&in.ListMeta, &out.ListMeta, s); err != nil {
-		return err
-	}
-	if in.Items != nil {
-		out.Items = make([]api.Daemon, len(in.Items))
-		for i := range in.Items {
-			if err := convert_v1_Daemon_To_api_Daemon(&in.Items[i], &out.Items[i], s); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Items = nil
-	}
-	return nil
-}
-
-func convert_v1_DaemonSpec_To_api_DaemonSpec(in *DaemonSpec, out *api.DaemonSpec, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*DaemonSpec))(in)
-	}
-	if in.Selector != nil {
-		out.Selector = make(map[string]string)
-		for key, val := range in.Selector {
-			out.Selector[key] = val
-		}
-	} else {
-		out.Selector = nil
-	}
-	if in.Template != nil {
-		out.Template = new(api.PodTemplateSpec)
-		if err := convert_v1_PodTemplateSpec_To_api_PodTemplateSpec(in.Template, out.Template, s); err != nil {
-			return err
-		}
-	} else {
-		out.Template = nil
-	}
-	return nil
-}
-
-func convert_v1_DaemonStatus_To_api_DaemonStatus(in *DaemonStatus, out *api.DaemonStatus, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*DaemonStatus))(in)
-	}
-	out.CurrentNumberScheduled = in.CurrentNumberScheduled
-	out.NumberMisscheduled = in.NumberMisscheduled
-	out.DesiredNumberScheduled = in.DesiredNumberScheduled
-	return nil
-}
-
 func convert_v1_DeleteOptions_To_api_DeleteOptions(in *DeleteOptions, out *api.DeleteOptions, s conversion.Scope) error {
 	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
 		defaulting.(func(*DeleteOptions))(in)
@@ -2843,6 +2776,34 @@ func convert_v1_DeleteOptions_To_api_DeleteOptions(in *DeleteOptions, out *api.D
 		*out.GracePeriodSeconds = *in.GracePeriodSeconds
 	} else {
 		out.GracePeriodSeconds = nil
+	}
+	return nil
+}
+
+func convert_v1_DownwardAPIVolumeFile_To_api_DownwardAPIVolumeFile(in *DownwardAPIVolumeFile, out *api.DownwardAPIVolumeFile, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*DownwardAPIVolumeFile))(in)
+	}
+	out.Path = in.Path
+	if err := convert_v1_ObjectFieldSelector_To_api_ObjectFieldSelector(&in.FieldRef, &out.FieldRef, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+func convert_v1_DownwardAPIVolumeSource_To_api_DownwardAPIVolumeSource(in *DownwardAPIVolumeSource, out *api.DownwardAPIVolumeSource, s conversion.Scope) error {
+	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
+		defaulting.(func(*DownwardAPIVolumeSource))(in)
+	}
+	if in.Items != nil {
+		out.Items = make([]api.DownwardAPIVolumeFile, len(in.Items))
+		for i := range in.Items {
+			if err := convert_v1_DownwardAPIVolumeFile_To_api_DownwardAPIVolumeFile(&in.Items[i], &out.Items[i], s); err != nil {
+				return err
+			}
+		}
+	} else {
+		out.Items = nil
 	}
 	return nil
 }
@@ -3234,6 +3195,30 @@ func convert_v1_LimitRangeItem_To_api_LimitRangeItem(in *LimitRangeItem, out *ap
 		}
 	} else {
 		out.Default = nil
+	}
+	if in.DefaultRequest != nil {
+		out.DefaultRequest = make(api.ResourceList)
+		for key, val := range in.DefaultRequest {
+			newVal := resource.Quantity{}
+			if err := s.Convert(&val, &newVal, 0); err != nil {
+				return err
+			}
+			out.DefaultRequest[api.ResourceName(key)] = newVal
+		}
+	} else {
+		out.DefaultRequest = nil
+	}
+	if in.MaxLimitRequestRatio != nil {
+		out.MaxLimitRequestRatio = make(api.ResourceList)
+		for key, val := range in.MaxLimitRequestRatio {
+			newVal := resource.Quantity{}
+			if err := s.Convert(&val, &newVal, 0); err != nil {
+				return err
+			}
+			out.MaxLimitRequestRatio[api.ResourceName(key)] = newVal
+		}
+	} else {
+		out.MaxLimitRequestRatio = nil
 	}
 	return nil
 }
@@ -3835,6 +3820,22 @@ func convert_v1_PersistentVolumeSource_To_api_PersistentVolumeSource(in *Persist
 		}
 	} else {
 		out.ISCSI = nil
+	}
+	if in.Cinder != nil {
+		out.Cinder = new(api.CinderVolumeSource)
+		if err := convert_v1_CinderVolumeSource_To_api_CinderVolumeSource(in.Cinder, out.Cinder, s); err != nil {
+			return err
+		}
+	} else {
+		out.Cinder = nil
+	}
+	if in.CephFS != nil {
+		out.CephFS = new(api.CephFSVolumeSource)
+		if err := convert_v1_CephFSVolumeSource_To_api_CephFSVolumeSource(in.CephFS, out.CephFS, s); err != nil {
+			return err
+		}
+	} else {
+		out.CephFS = nil
 	}
 	return nil
 }
@@ -4680,69 +4681,6 @@ func convert_v1_TCPSocketAction_To_api_TCPSocketAction(in *TCPSocketAction, out 
 	return nil
 }
 
-func convert_v1_ThirdPartyResource_To_api_ThirdPartyResource(in *ThirdPartyResource, out *api.ThirdPartyResource, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*ThirdPartyResource))(in)
-	}
-	if err := convert_v1_TypeMeta_To_api_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_v1_ObjectMeta_To_api_ObjectMeta(&in.ObjectMeta, &out.ObjectMeta, s); err != nil {
-		return err
-	}
-	out.Description = in.Description
-	if in.Versions != nil {
-		out.Versions = make([]api.APIVersion, len(in.Versions))
-		for i := range in.Versions {
-			if err := convert_v1_APIVersion_To_api_APIVersion(&in.Versions[i], &out.Versions[i], s); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Versions = nil
-	}
-	return nil
-}
-
-func convert_v1_ThirdPartyResourceData_To_api_ThirdPartyResourceData(in *ThirdPartyResourceData, out *api.ThirdPartyResourceData, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*ThirdPartyResourceData))(in)
-	}
-	if err := convert_v1_TypeMeta_To_api_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_v1_ObjectMeta_To_api_ObjectMeta(&in.ObjectMeta, &out.ObjectMeta, s); err != nil {
-		return err
-	}
-	if err := s.Convert(&in.Data, &out.Data, 0); err != nil {
-		return err
-	}
-	return nil
-}
-
-func convert_v1_ThirdPartyResourceList_To_api_ThirdPartyResourceList(in *ThirdPartyResourceList, out *api.ThirdPartyResourceList, s conversion.Scope) error {
-	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
-		defaulting.(func(*ThirdPartyResourceList))(in)
-	}
-	if err := convert_v1_TypeMeta_To_api_TypeMeta(&in.TypeMeta, &out.TypeMeta, s); err != nil {
-		return err
-	}
-	if err := convert_v1_ListMeta_To_api_ListMeta(&in.ListMeta, &out.ListMeta, s); err != nil {
-		return err
-	}
-	if in.Items != nil {
-		out.Items = make([]api.ThirdPartyResource, len(in.Items))
-		for i := range in.Items {
-			if err := convert_v1_ThirdPartyResource_To_api_ThirdPartyResource(&in.Items[i], &out.Items[i], s); err != nil {
-				return err
-			}
-		}
-	} else {
-		out.Items = nil
-	}
-	return nil
-}
-
 func convert_v1_TypeMeta_To_api_TypeMeta(in *TypeMeta, out *api.TypeMeta, s conversion.Scope) error {
 	if defaulting, found := s.DefaultingInterface(reflect.TypeOf(*in)); found {
 		defaulting.(func(*TypeMeta))(in)
@@ -4865,15 +4803,40 @@ func convert_v1_VolumeSource_To_api_VolumeSource(in *VolumeSource, out *api.Volu
 	} else {
 		out.RBD = nil
 	}
+	if in.Cinder != nil {
+		out.Cinder = new(api.CinderVolumeSource)
+		if err := convert_v1_CinderVolumeSource_To_api_CinderVolumeSource(in.Cinder, out.Cinder, s); err != nil {
+			return err
+		}
+	} else {
+		out.Cinder = nil
+	}
+	if in.CephFS != nil {
+		out.CephFS = new(api.CephFSVolumeSource)
+		if err := convert_v1_CephFSVolumeSource_To_api_CephFSVolumeSource(in.CephFS, out.CephFS, s); err != nil {
+			return err
+		}
+	} else {
+		out.CephFS = nil
+	}
+	if in.DownwardAPI != nil {
+		out.DownwardAPI = new(api.DownwardAPIVolumeSource)
+		if err := convert_v1_DownwardAPIVolumeSource_To_api_DownwardAPIVolumeSource(in.DownwardAPI, out.DownwardAPI, s); err != nil {
+			return err
+		}
+	} else {
+		out.DownwardAPI = nil
+	}
 	return nil
 }
 
 func init() {
 	err := api.Scheme.AddGeneratedConversionFuncs(
-		convert_api_APIVersion_To_v1_APIVersion,
 		convert_api_AWSElasticBlockStoreVolumeSource_To_v1_AWSElasticBlockStoreVolumeSource,
 		convert_api_Binding_To_v1_Binding,
 		convert_api_Capabilities_To_v1_Capabilities,
+		convert_api_CephFSVolumeSource_To_v1_CephFSVolumeSource,
+		convert_api_CinderVolumeSource_To_v1_CinderVolumeSource,
 		convert_api_ComponentCondition_To_v1_ComponentCondition,
 		convert_api_ComponentStatusList_To_v1_ComponentStatusList,
 		convert_api_ComponentStatus_To_v1_ComponentStatus,
@@ -4884,11 +4847,9 @@ func init() {
 		convert_api_ContainerState_To_v1_ContainerState,
 		convert_api_ContainerStatus_To_v1_ContainerStatus,
 		convert_api_Container_To_v1_Container,
-		convert_api_DaemonList_To_v1_DaemonList,
-		convert_api_DaemonSpec_To_v1_DaemonSpec,
-		convert_api_DaemonStatus_To_v1_DaemonStatus,
-		convert_api_Daemon_To_v1_Daemon,
 		convert_api_DeleteOptions_To_v1_DeleteOptions,
+		convert_api_DownwardAPIVolumeFile_To_v1_DownwardAPIVolumeFile,
+		convert_api_DownwardAPIVolumeSource_To_v1_DownwardAPIVolumeSource,
 		convert_api_EmptyDirVolumeSource_To_v1_EmptyDirVolumeSource,
 		convert_api_EndpointAddress_To_v1_EndpointAddress,
 		convert_api_EndpointPort_To_v1_EndpointPort,
@@ -4984,17 +4945,15 @@ func init() {
 		convert_api_StatusDetails_To_v1_StatusDetails,
 		convert_api_Status_To_v1_Status,
 		convert_api_TCPSocketAction_To_v1_TCPSocketAction,
-		convert_api_ThirdPartyResourceData_To_v1_ThirdPartyResourceData,
-		convert_api_ThirdPartyResourceList_To_v1_ThirdPartyResourceList,
-		convert_api_ThirdPartyResource_To_v1_ThirdPartyResource,
 		convert_api_TypeMeta_To_v1_TypeMeta,
 		convert_api_VolumeMount_To_v1_VolumeMount,
 		convert_api_VolumeSource_To_v1_VolumeSource,
 		convert_api_Volume_To_v1_Volume,
-		convert_v1_APIVersion_To_api_APIVersion,
 		convert_v1_AWSElasticBlockStoreVolumeSource_To_api_AWSElasticBlockStoreVolumeSource,
 		convert_v1_Binding_To_api_Binding,
 		convert_v1_Capabilities_To_api_Capabilities,
+		convert_v1_CephFSVolumeSource_To_api_CephFSVolumeSource,
+		convert_v1_CinderVolumeSource_To_api_CinderVolumeSource,
 		convert_v1_ComponentCondition_To_api_ComponentCondition,
 		convert_v1_ComponentStatusList_To_api_ComponentStatusList,
 		convert_v1_ComponentStatus_To_api_ComponentStatus,
@@ -5005,11 +4964,9 @@ func init() {
 		convert_v1_ContainerState_To_api_ContainerState,
 		convert_v1_ContainerStatus_To_api_ContainerStatus,
 		convert_v1_Container_To_api_Container,
-		convert_v1_DaemonList_To_api_DaemonList,
-		convert_v1_DaemonSpec_To_api_DaemonSpec,
-		convert_v1_DaemonStatus_To_api_DaemonStatus,
-		convert_v1_Daemon_To_api_Daemon,
 		convert_v1_DeleteOptions_To_api_DeleteOptions,
+		convert_v1_DownwardAPIVolumeFile_To_api_DownwardAPIVolumeFile,
+		convert_v1_DownwardAPIVolumeSource_To_api_DownwardAPIVolumeSource,
 		convert_v1_EmptyDirVolumeSource_To_api_EmptyDirVolumeSource,
 		convert_v1_EndpointAddress_To_api_EndpointAddress,
 		convert_v1_EndpointPort_To_api_EndpointPort,
@@ -5105,9 +5062,6 @@ func init() {
 		convert_v1_StatusDetails_To_api_StatusDetails,
 		convert_v1_Status_To_api_Status,
 		convert_v1_TCPSocketAction_To_api_TCPSocketAction,
-		convert_v1_ThirdPartyResourceData_To_api_ThirdPartyResourceData,
-		convert_v1_ThirdPartyResourceList_To_api_ThirdPartyResourceList,
-		convert_v1_ThirdPartyResource_To_api_ThirdPartyResource,
 		convert_v1_TypeMeta_To_api_TypeMeta,
 		convert_v1_VolumeMount_To_api_VolumeMount,
 		convert_v1_VolumeSource_To_api_VolumeSource,

@@ -17,7 +17,6 @@ limitations under the License.
 package util
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -57,8 +56,6 @@ type Factory struct {
 	Object func() (meta.RESTMapper, runtime.ObjectTyper)
 	// Returns a client for accessing Kubernetes resources or an error.
 	Client func() (*client.Client, error)
-	// Returns a client for accessing experimental Kubernetes resources or an error.
-	ExperimentalClient func() (*client.ExperimentalClient, error)
 	// Returns a client.Config for accessing the Kubernetes server.
 	ClientConfig func() (*client.Config, error)
 	// Returns a RESTClient for working with the specified RESTMapping or an error. This is intended
@@ -79,7 +76,7 @@ type Factory struct {
 	// LabelsForObject returns the labels associated with the provided object
 	LabelsForObject func(object runtime.Object) (map[string]string, error)
 	// Returns a schema that can validate objects stored on disk.
-	Validator func() (validation.Schema, error)
+	Validator func(validate bool) (validation.Schema, error)
 	// Returns the default namespace to use in cases where no
 	// other namespace is specified and whether the namespace was
 	// overriden.
@@ -110,19 +107,7 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 	}
 
 	clients := NewClientCache(clientConfig)
-	expClients := NewExperimentalClientCache(clientConfig)
 
-	noClientErr := errors.New("could not get client")
-	getBothClients := func(group string, version string) (client *client.Client, expClient *client.ExperimentalClient, err error) {
-		err = noClientErr
-		switch group {
-		case "api":
-			client, err = clients.ClientForVersion(version)
-		case "experimental":
-			expClient, err = expClients.Client()
-		}
-		return
-	}
 	return &Factory{
 		clients:    clients,
 		flags:      flags,
@@ -138,30 +123,20 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 		Client: func() (*client.Client, error) {
 			return clients.ClientForVersion("")
 		},
-		ExperimentalClient: func() (*client.ExperimentalClient, error) {
-			return expClients.Client()
-		},
 		ClientConfig: func() (*client.Config, error) {
 			return clients.ClientConfigForVersion("")
 		},
 		RESTClient: func(mapping *meta.RESTMapping) (resource.RESTClient, error) {
 			group, err := api.RESTMapper.GroupForResource(mapping.Resource)
+			client, err := clients.ClientForVersion(mapping.APIVersion)
 			if err != nil {
 				return nil, err
 			}
 			switch group {
 			case "api":
-				client, err := clients.ClientForVersion(mapping.APIVersion)
-				if err != nil {
-					return nil, err
-				}
 				return client.RESTClient, nil
 			case "experimental":
-				client, err := expClients.Client()
-				if err != nil {
-					return nil, err
-				}
-				return client.RESTClient, nil
+				return client.ExperimentalClient.RESTClient, nil
 			}
 			return nil, fmt.Errorf("unable to get RESTClient for resource '%s'", mapping.Resource)
 		},
@@ -170,11 +145,11 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 			if err != nil {
 				return nil, err
 			}
-			client, expClient, err := getBothClients(group, mapping.APIVersion)
+			client, err := clients.ClientForVersion(mapping.APIVersion)
 			if err != nil {
 				return nil, err
 			}
-			if describer, ok := kubectl.DescriberFor(mapping.Kind, client, expClient); ok {
+			if describer, ok := kubectl.DescriberFor(group, mapping.Kind, client); ok {
 				return describer, nil
 			}
 			return nil, fmt.Errorf("no description has been implemented for %q", mapping.Kind)
@@ -226,35 +201,26 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 			return meta.NewAccessor().Labels(object)
 		},
 		Scaler: func(mapping *meta.RESTMapping) (kubectl.Scaler, error) {
-			group, err := api.RESTMapper.GroupForResource(mapping.Resource)
-			if err != nil {
-				return nil, err
-			}
-			client, _, err := getBothClients(group, mapping.APIVersion)
+			client, err := clients.ClientForVersion(mapping.APIVersion)
 			if err != nil {
 				return nil, err
 			}
 			return kubectl.ScalerFor(mapping.Kind, kubectl.NewScalerClient(client))
 		},
 		Reaper: func(mapping *meta.RESTMapping) (kubectl.Reaper, error) {
-			group, err := api.RESTMapper.GroupForResource(mapping.Resource)
+			client, err := clients.ClientForVersion(mapping.APIVersion)
 			if err != nil {
 				return nil, err
 			}
-			client, expClient, err := getBothClients(group, mapping.APIVersion)
-			if err != nil {
-				return nil, err
-			}
-			return kubectl.ReaperFor(mapping.Kind, client, expClient)
+			return kubectl.ReaperFor(mapping.Kind, client)
 		},
-		Validator: func() (validation.Schema, error) {
-			if flags.Lookup("validate").Value.String() == "true" {
+		Validator: func(validate bool) (validation.Schema, error) {
+			if validate {
 				client, err := clients.ClientForVersion("")
 				if err != nil {
 					return nil, err
 				}
-				expClient, _ := expClients.Client()
-				return &clientSwaggerSchema{client, expClient, api.Scheme}, nil
+				return &clientSwaggerSchema{client, client.ExperimentalClient, api.Scheme}, nil
 			}
 			return validation.NullSchema{}, nil
 		},
@@ -272,12 +238,6 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 func (f *Factory) BindFlags(flags *pflag.FlagSet) {
 	// any flags defined by external projects (not part of pflags)
 	flags.AddGoFlagSet(flag.CommandLine)
-
-	// Hack for global access to validation flag.
-	// TODO: Refactor out after configuration flag overhaul.
-	if f.flags.Lookup("validate") == nil {
-		f.flags.Bool("validate", false, "If true, use a schema to validate the input before sending it")
-	}
 
 	// Merge factory's flags
 	flags.AddFlagSet(f.flags)

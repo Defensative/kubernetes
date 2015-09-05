@@ -79,10 +79,10 @@ func newExternalScheme() (*runtime.Scheme, meta.RESTMapper, runtime.Codec) {
 	scheme.AddKnownTypeWithName("", "Type", &internalType{})
 	scheme.AddKnownTypeWithName("unlikelyversion", "Type", &externalType{})
 	//This tests that kubectl will not confuse the external scheme with the internal scheme, even when they accidentally have versions of the same name.
-	scheme.AddKnownTypeWithName(testapi.Version(), "Type", &ExternalType2{})
+	scheme.AddKnownTypeWithName(testapi.Default.Version(), "Type", &ExternalType2{})
 
 	codec := runtime.CodecFor(scheme, "unlikelyversion")
-	validVersion := testapi.Version()
+	validVersion := testapi.Default.Version()
 	mapper := meta.NewDefaultRESTMapper("apitest", []string{"unlikelyversion", validVersion}, func(version string) (*meta.VersionInterfaces, error) {
 		return &meta.VersionInterfaces{
 			Codec:            runtime.CodecFor(scheme, version),
@@ -110,6 +110,11 @@ func (t *testPrinter) PrintObj(obj runtime.Object, out io.Writer) error {
 	t.Objects = append(t.Objects, obj)
 	fmt.Fprintf(out, "%#v", obj)
 	return t.Err
+}
+
+// TODO: implement HandledResources()
+func (t *testPrinter) HandledResources() []string {
+	return []string{}
 }
 
 type testDescriber struct {
@@ -155,7 +160,7 @@ func NewTestFactory() (*cmdutil.Factory, *testFactory, runtime.Codec) {
 		Printer: func(mapping *meta.RESTMapping, noHeaders, withNamespace bool, wide bool, showAll bool, columnLabels []string) (kubectl.ResourcePrinter, error) {
 			return t.Printer, t.Err
 		},
-		Validator: func() (validation.Schema, error) {
+		Validator: func(validate bool) (validation.Schema, error) {
 			return t.Validator, t.Err
 		},
 		DefaultNamespace: func() (string, bool, error) {
@@ -210,7 +215,7 @@ func NewAPIFactory() (*cmdutil.Factory, *testFactory, runtime.Codec) {
 		Printer: func(mapping *meta.RESTMapping, noHeaders, withNamespace bool, wide bool, showAll bool, columnLabels []string) (kubectl.ResourcePrinter, error) {
 			return t.Printer, t.Err
 		},
-		Validator: func() (validation.Schema, error) {
+		Validator: func(validate bool) (validation.Schema, error) {
 			return t.Validator, t.Err
 		},
 		DefaultNamespace: func() (string, bool, error) {
@@ -223,7 +228,7 @@ func NewAPIFactory() (*cmdutil.Factory, *testFactory, runtime.Codec) {
 			generator, ok := generators[name]
 			return generator, ok
 		},
-	}, t, testapi.Codec()
+	}, t, testapi.Default.Codec()
 }
 
 func objBody(codec runtime.Codec, obj runtime.Object) io.ReadCloser {
@@ -240,7 +245,7 @@ func stringBody(body string) io.ReadCloser {
 //func TestClientVersions(t *testing.T) {
 //	f := cmdutil.NewFactory(nil)
 //
-//	version := testapi.Version()
+//	version := testapi.Default.Version()
 //	mapping := &meta.RESTMapping{
 //		APIVersion: version,
 //	}

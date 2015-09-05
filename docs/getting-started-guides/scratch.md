@@ -212,7 +212,7 @@ A Kubernetes binary release includes all the Kubernetes binaries as well as the 
 You can use a Kubernetes binary release (recommended) or build your Kubernetes binaries following the instructions in the
 [Developer Documentation](../devel/README.md).  Only using a binary release is covered in this guide.
 
-Download the [latest binary release](https://github.com/GoogleCloudPlatform/kubernetes/releases/latest) and unzip it.
+Download the [latest binary release](https://github.com/kubernetes/kubernetes/releases/latest) and unzip it.
 Then locate `./kubernetes/server/kubernetes-server-linux-amd64.tar.gz` and unzip *that*.
 Then, within the second set of unzipped files, locate `./kubernetes/server/bin`, which contains
 all the necessary binaries.
@@ -226,7 +226,7 @@ we recommend that you run these as containers, so you need an image to be built.
 You have several choices for Kubernetes images:
 - Use images hosted on Google Container Registry (GCR):
   - e.g `gcr.io/google_containers/hyperkube:$TAG`, where `TAG` is the latest
-    release tag, which can be found on the [latest releases page](https://github.com/GoogleCloudPlatform/kubernetes/releases/latest).
+    release tag, which can be found on the [latest releases page](https://github.com/kubernetes/kubernetes/releases/latest).
   - Ensure $TAG is the same tag as the release tag you are using for kubelet and kube-proxy.
   - The [hyperkube](../../cmd/hyperkube/) binary is an all in one binary
     - `hyperkube kubelet ...` runs the kublet, `hyperkube apiserver ...` runs an apiserver, etc.
@@ -235,7 +235,7 @@ You have several choices for Kubernetes images:
   - The release contains files such as `./kubernetes/server/bin/kube-apiserver.tar` which
     can be converted into docker images using a command like
     `docker load -i kube-apiserver.tar`
-  - You can verify if the image is loaded successfully with the right reposity and tag using
+  - You can verify if the image is loaded successfully with the right repository and tag using
     command like `docker images`
 
 For etcd, you can:
@@ -535,6 +535,7 @@ You will need to run one or more instances of etcd.
 availability.
 
 To run an etcd instance:
+
 1. copy `cluster/saltbase/salt/etcd/etcd.manifest`
 1. make any modifications needed
 1. start the pod by putting it into the kubelet manifest directory
@@ -709,6 +710,7 @@ Complete this template for the scheduler pod:
         ],
         "livenessProbe": {
           "httpGet": {
+            "host" : "127.0.0.1",
             "path": "/healthz",
             "port": 10251
           },
@@ -765,6 +767,7 @@ Template for controller manager pod:
         ],
         "livenessProbe": {
           "httpGet": {
+            "host": "127.0.0.1",
             "path": "/healthz",
             "port": 10252
           },

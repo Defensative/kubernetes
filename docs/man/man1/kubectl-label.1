@@ -27,12 +27,12 @@ If \-\-resource\-version is specified, then updates will use this resource versi
     select all resources in the namespace of the specified resource types
 
 .PP
-\fB\-f\fP, \fB\-\-filename\fP=[]
-    Filename, directory, or URL to a file identifying the resource to update the labels
+\fB\-\-dry\-run\fP=false
+    If true, only print the object that would be sent, without sending it.
 
 .PP
-\fB\-h\fP, \fB\-\-help\fP=false
-    help for label
+\fB\-f\fP, \fB\-\-filename\fP=[]
+    Filename, directory, or URL to a file identifying the resource to update the labels
 
 .PP
 \fB\-\-no\-headers\fP=false
@@ -40,7 +40,7 @@ If \-\-resource\-version is specified, then updates will use this resource versi
 
 .PP
 \fB\-o\fP, \fB\-\-output\fP=""
-    Output format. One of: json|yaml|template|templatefile|wide|jsonpath.
+    Output format. One of: json|yaml|template|templatefile|wide|jsonpath|name.
 
 .PP
 \fB\-\-output\-version\fP=""
@@ -161,10 +161,6 @@ If \-\-resource\-version is specified, then updates will use this resource versi
 .PP
 \fB\-\-v\fP=0
     log level for V logs
-
-.PP
-\fB\-\-validate\fP=false
-    If true, use a schema to validate the input before sending it
 
 .PP
 \fB\-\-vmodule\fP=

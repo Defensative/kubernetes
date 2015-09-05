@@ -46,7 +46,11 @@ type proxySocket interface {
 }
 
 func newProxySocket(protocol api.Protocol, ip net.IP, port int) (proxySocket, error) {
-	host := ip.String()
+	host := ""
+	if ip != nil {
+		host = ip.String()
+	}
+
 	switch strings.ToUpper(string(protocol)) {
 	case "TCP":
 		listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
@@ -107,7 +111,7 @@ func tryConnect(service proxy.ServicePortName, srcAddr net.Addr, protocol string
 
 func (tcp *tcpProxySocket) ProxyLoop(service proxy.ServicePortName, myInfo *serviceInfo, proxier *Proxier) {
 	for {
-		if info, exists := proxier.getServiceInfo(service); !exists || info != myInfo {
+		if !myInfo.isAlive() {
 			// The service port was closed or replaced.
 			return
 		}
@@ -121,7 +125,7 @@ func (tcp *tcpProxySocket) ProxyLoop(service proxy.ServicePortName, myInfo *serv
 			if isClosedError(err) {
 				return
 			}
-			if info, exists := proxier.getServiceInfo(service); !exists || info != myInfo {
+			if !myInfo.isAlive() {
 				// Then the service port was just closed so the accept failure is to be expected.
 				return
 			}
@@ -194,7 +198,7 @@ func newClientCache() *clientCache {
 func (udp *udpProxySocket) ProxyLoop(service proxy.ServicePortName, myInfo *serviceInfo, proxier *Proxier) {
 	var buffer [4096]byte // 4KiB should be enough for most whole-packets
 	for {
-		if info, exists := proxier.getServiceInfo(service); !exists || info != myInfo {
+		if !myInfo.isAlive() {
 			// The service port was closed or replaced.
 			break
 		}

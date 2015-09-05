@@ -17,7 +17,6 @@ limitations under the License.
 package master
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -26,7 +25,6 @@ import (
 	"net/http/pprof"
 	"net/url"
 	"os"
-	rt "runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +42,7 @@ import (
 	"k8s.io/kubernetes/pkg/auth/authorizer"
 	"k8s.io/kubernetes/pkg/auth/handlers"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/expapi"
 	explatest "k8s.io/kubernetes/pkg/expapi/latest"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/healthz"
@@ -51,6 +50,7 @@ import (
 	"k8s.io/kubernetes/pkg/master/ports"
 	"k8s.io/kubernetes/pkg/registry/componentstatus"
 	controlleretcd "k8s.io/kubernetes/pkg/registry/controller/etcd"
+	deploymentetcd "k8s.io/kubernetes/pkg/registry/deployment/etcd"
 	"k8s.io/kubernetes/pkg/registry/endpoint"
 	endpointsetcd "k8s.io/kubernetes/pkg/registry/endpoint/etcd"
 	eventetcd "k8s.io/kubernetes/pkg/registry/event/etcd"
@@ -71,12 +71,16 @@ import (
 	serviceetcd "k8s.io/kubernetes/pkg/registry/service/etcd"
 	ipallocator "k8s.io/kubernetes/pkg/registry/service/ipallocator"
 	serviceaccountetcd "k8s.io/kubernetes/pkg/registry/serviceaccount/etcd"
+	thirdpartyresourceetcd "k8s.io/kubernetes/pkg/registry/thirdpartyresource/etcd"
+	"k8s.io/kubernetes/pkg/registry/thirdpartyresourcedata"
+	thirdpartyresourcedataetcd "k8s.io/kubernetes/pkg/registry/thirdpartyresourcedata/etcd"
 	"k8s.io/kubernetes/pkg/storage"
 	etcdstorage "k8s.io/kubernetes/pkg/storage/etcd"
 	"k8s.io/kubernetes/pkg/tools"
 	"k8s.io/kubernetes/pkg/ui"
 	"k8s.io/kubernetes/pkg/util"
 
+	daemonetcd "k8s.io/kubernetes/pkg/registry/daemon/etcd"
 	horizontalpodautoscaleretcd "k8s.io/kubernetes/pkg/registry/horizontalpodautoscaler/etcd"
 
 	"github.com/emicklei/go-restful"
@@ -110,6 +114,7 @@ type Config struct {
 	// allow downstream consumers to disable the index route
 	EnableIndex           bool
 	EnableProfiling       bool
+	EnableWatchCache      bool
 	APIPrefix             string
 	ExpAPIPrefix          string
 	CorsAllowedOriginList []string
@@ -187,6 +192,7 @@ type Master struct {
 	enableUISupport       bool
 	enableSwaggerSupport  bool
 	enableProfiling       bool
+	enableWatchCache      bool
 	apiPrefix             string
 	expAPIPrefix          string
 	corsAllowedOriginList []string
@@ -232,6 +238,9 @@ type Master struct {
 	lastSync       int64 // Seconds since Epoch
 	lastSyncMetric prometheus.GaugeFunc
 	clock          util.Clock
+
+	// storage for third party objects
+	thirdPartyStorage storage.Interface
 }
 
 // NewEtcdStorage returns a storage.Interface for the provided arguments or an error if the version
@@ -342,6 +351,7 @@ func New(c *Config) *Master {
 		enableUISupport:       c.EnableUISupport,
 		enableSwaggerSupport:  c.EnableSwaggerSupport,
 		enableProfiling:       c.EnableProfiling,
+		enableWatchCache:      c.EnableWatchCache,
 		apiPrefix:             c.APIPrefix,
 		expAPIPrefix:          c.ExpAPIPrefix,
 		corsAllowedOriginList: c.CorsAllowedOriginList,
@@ -408,29 +418,15 @@ func (m *Master) HandleFuncWithAuth(pattern string, handler func(http.ResponseWr
 func NewHandlerContainer(mux *http.ServeMux) *restful.Container {
 	container := restful.NewContainer()
 	container.ServeMux = mux
-	container.RecoverHandler(logStackOnRecover)
+	apiserver.InstallRecoverHandler(container)
 	return container
-}
-
-//TODO: Unify with RecoverPanics?
-func logStackOnRecover(panicReason interface{}, httpWriter http.ResponseWriter) {
-	var buffer bytes.Buffer
-	buffer.WriteString(fmt.Sprintf("recover from panic situation: - %v\r\n", panicReason))
-	for i := 2; ; i += 1 {
-		_, file, line, ok := rt.Caller(i)
-		if !ok {
-			break
-		}
-		buffer.WriteString(fmt.Sprintf("    %s:%d\r\n", file, line))
-	}
-	glog.Errorln(buffer.String())
 }
 
 // init initializes master.
 func (m *Master) init(c *Config) {
 	healthzChecks := []healthz.HealthzChecker{}
 	m.clock = util.RealClock{}
-	podStorage := podetcd.NewStorage(c.DatabaseStorage, true, c.KubeletClient)
+	podStorage := podetcd.NewStorage(c.DatabaseStorage, c.EnableWatchCache, c.KubeletClient)
 
 	podTemplateStorage := podtemplateetcd.NewREST(c.DatabaseStorage)
 
@@ -446,10 +442,10 @@ func (m *Master) init(c *Config) {
 	namespaceStorage, namespaceStatusStorage, namespaceFinalizeStorage := namespaceetcd.NewREST(c.DatabaseStorage)
 	m.namespaceRegistry = namespace.NewRegistry(namespaceStorage)
 
-	endpointsStorage := endpointsetcd.NewREST(c.DatabaseStorage, true)
+	endpointsStorage := endpointsetcd.NewREST(c.DatabaseStorage, c.EnableWatchCache)
 	m.endpointRegistry = endpoint.NewRegistry(endpointsStorage)
 
-	nodeStorage, nodeStatusStorage := nodeetcd.NewREST(c.DatabaseStorage, true, c.KubeletClient)
+	nodeStorage, nodeStatusStorage := nodeetcd.NewREST(c.DatabaseStorage, c.EnableWatchCache, c.KubeletClient)
 	m.nodeRegistry = minion.NewRegistry(nodeStorage)
 
 	serviceStorage := serviceetcd.NewREST(c.DatabaseStorage)
@@ -777,15 +773,67 @@ func (m *Master) api_v1() *apiserver.APIGroupVersion {
 	return version
 }
 
+func (m *Master) InstallThirdPartyAPI(rsrc *expapi.ThirdPartyResource) error {
+	kind, group, err := thirdpartyresourcedata.ExtractApiGroupAndKind(rsrc)
+	if err != nil {
+		return err
+	}
+	thirdparty := m.thirdpartyapi(group, kind, rsrc.Versions[0].Name)
+	if err := thirdparty.InstallREST(m.handlerContainer); err != nil {
+		glog.Fatalf("Unable to setup thirdparty api: %v", err)
+	}
+	thirdPartyPrefix := "/thirdparty/" + group + "/"
+	apiserver.AddApiWebService(m.handlerContainer, thirdPartyPrefix, []string{rsrc.Versions[0].Name})
+	thirdPartyRequestInfoResolver := &apiserver.APIRequestInfoResolver{APIPrefixes: util.NewStringSet(strings.TrimPrefix(group, "/")), RestMapper: thirdparty.Mapper}
+	apiserver.InstallServiceErrorHandler(m.handlerContainer, thirdPartyRequestInfoResolver, []string{thirdparty.Version})
+	return nil
+}
+
+func (m *Master) thirdpartyapi(group, kind, version string) *apiserver.APIGroupVersion {
+	resourceStorage := thirdpartyresourcedataetcd.NewREST(m.thirdPartyStorage, group, kind)
+
+	apiRoot := "/thirdparty/" + group + "/"
+
+	storage := map[string]rest.Storage{
+		strings.ToLower(kind) + "s": resourceStorage,
+	}
+
+	return &apiserver.APIGroupVersion{
+		Root: apiRoot,
+
+		Creater:   thirdpartyresourcedata.NewObjectCreator(version, api.Scheme),
+		Convertor: api.Scheme,
+		Typer:     api.Scheme,
+
+		Mapper:  thirdpartyresourcedata.NewMapper(explatest.RESTMapper, kind, version),
+		Codec:   explatest.Codec,
+		Linker:  explatest.SelfLinker,
+		Storage: storage,
+		Version: version,
+
+		Admit:   m.admissionControl,
+		Context: m.requestContextMapper,
+
+		ProxyDialerFn:     m.dialer,
+		MinRequestTimeout: m.minRequestTimeout,
+	}
+}
+
 // expapi returns the resources and codec for the experimental api
 func (m *Master) expapi(c *Config) *apiserver.APIGroupVersion {
-	controllerStorage := expcontrolleretcd.NewStorage(c.DatabaseStorage)
-	autoscalerStorage := horizontalpodautoscaleretcd.NewREST(c.DatabaseStorage)
+	controllerStorage := expcontrolleretcd.NewStorage(c.ExpDatabaseStorage)
+	autoscalerStorage := horizontalpodautoscaleretcd.NewREST(c.ExpDatabaseStorage)
+	thirdPartyResourceStorage := thirdpartyresourceetcd.NewREST(c.ExpDatabaseStorage)
+	daemonStorage := daemonetcd.NewREST(c.ExpDatabaseStorage)
+	deploymentStorage := deploymentetcd.NewREST(c.ExpDatabaseStorage)
 
 	storage := map[string]rest.Storage{
 		strings.ToLower("replicationControllers"):       controllerStorage.ReplicationController,
 		strings.ToLower("replicationControllers/scale"): controllerStorage.Scale,
 		strings.ToLower("horizontalpodautoscalers"):     autoscalerStorage,
+		strings.ToLower("thirdpartyresources"):          thirdPartyResourceStorage,
+		strings.ToLower("daemons"):                      daemonStorage,
+		strings.ToLower("deployments"):                  deploymentStorage,
 	}
 
 	return &apiserver.APIGroupVersion{

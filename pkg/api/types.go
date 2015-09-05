@@ -197,6 +197,7 @@ type VolumeSource struct {
 	// directly exposed to the container. This is generally used for system
 	// agents or other privileged things that are allowed to see the host
 	// machine. Most containers will NOT need this.
+	// ---
 	// TODO(jonesdl) We need to restrict who can use host directory mounts and who can/can not
 	// mount host directories as read/write.
 	HostPath *HostPathVolumeSource `json:"hostPath,omitempty"`
@@ -223,6 +224,14 @@ type VolumeSource struct {
 	PersistentVolumeClaim *PersistentVolumeClaimVolumeSource `json:"persistentVolumeClaim,omitempty"`
 	// RBD represents a Rados Block Device mount on the host that shares a pod's lifetime
 	RBD *RBDVolumeSource `json:"rbd,omitempty"`
+	// Cinder represents a cinder volume attached and mounted on kubelets host machine
+	Cinder *CinderVolumeSource `json:"cinder,omitempty"`
+
+	// CephFS represents a Cephfs mount on the host that shares a pod's lifetime
+	CephFS *CephFSVolumeSource `json:"cephfs,omitempty"`
+
+	// DownwardAPI represents metadata about the pod that should populate this volume
+	DownwardAPI *DownwardAPIVolumeSource `json:"downwardAPI,omitempty"`
 }
 
 // Similar to VolumeSource but meant for the administrator who creates PVs.
@@ -247,6 +256,10 @@ type PersistentVolumeSource struct {
 	// ISCSIVolumeSource represents an ISCSI resource that is attached to a
 	// kubelet's host machine and then exposed to the pod.
 	ISCSI *ISCSIVolumeSource `json:"iscsi,omitempty"`
+	// Cinder represents a cinder volume attached and mounted on kubelets host machine
+	Cinder *CinderVolumeSource `json:"cinder,omitempty"`
+	// CephFS represents a Ceph FS mount on the host that shares a pod's lifetime
+	CephFS *CephFSVolumeSource `json:"cephfs,omitempty"`
 }
 
 type PersistentVolumeClaimVolumeSource struct {
@@ -290,10 +303,12 @@ const (
 	// PersistentVolumeReclaimRecycle means the volume will be recycled back into the pool of unbound persistent volumes on release from its claim.
 	// The volume plugin must support Recycling.
 	PersistentVolumeReclaimRecycle PersistentVolumeReclaimPolicy = "Recycle"
+
 	// PersistentVolumeReclaimDelete means the volume will be deleted from Kubernetes on release from its claim.
 	// The volume plugin must support Deletion.
 	// TODO: implement w/ DeletableVolumePlugin
 	// PersistentVolumeReclaimDelete PersistentVolumeReclaimPolicy = "Delete"
+
 	// PersistentVolumeReclaimRetain means the volume will left in its current phase (Released) for manual reclamation by the administrator.
 	// The default policy is Retain.
 	PersistentVolumeReclaimRetain PersistentVolumeReclaimPolicy = "Retain"
@@ -311,7 +326,7 @@ type PersistentVolumeStatus struct {
 type PersistentVolumeList struct {
 	TypeMeta `json:",inline"`
 	ListMeta `json:"metadata,omitempty"`
-	Items    []PersistentVolume `json:"items,omitempty"`
+	Items    []PersistentVolume `json:"items"`
 }
 
 // PersistentVolumeClaim is a user's request for and claim to a persistent volume
@@ -329,7 +344,7 @@ type PersistentVolumeClaim struct {
 type PersistentVolumeClaimList struct {
 	TypeMeta `json:",inline"`
 	ListMeta `json:"metadata,omitempty"`
-	Items    []PersistentVolumeClaim `json:"items,omitempty"`
+	Items    []PersistentVolumeClaim `json:"items"`
 }
 
 // PersistentVolumeClaimSpec describes the common attributes of storage devices
@@ -553,6 +568,50 @@ type RBDVolumeSource struct {
 	// Optional: Defaults to false (read/write). ReadOnly here will force
 	// the ReadOnly setting in VolumeMounts.
 	ReadOnly bool `json:"readOnly,omitempty"`
+}
+
+// CinderVolumeSource represents a cinder volume resource in Openstack.
+// A Cinder volume must exist and be formatted before mounting to a container.
+// The volume must also be in the same region as the kubelet.
+type CinderVolumeSource struct {
+	// Unique id of the volume used to identify the cinder volume
+	VolumeID string `json:"volumeID"`
+	// Required: Filesystem type to mount.
+	// Must be a filesystem type supported by the host operating system.
+	// Only ext3 and ext4 are allowed
+	FSType string `json:"fsType,omitempty"`
+	// Optional: Defaults to false (read/write). ReadOnly here will force
+	// the ReadOnly setting in VolumeMounts.
+	ReadOnly bool `json:"readOnly,omitempty"`
+}
+
+// CephFSVolumeSource represents a Ceph Filesystem Mount that lasts the lifetime of a pod
+type CephFSVolumeSource struct {
+	// Required: Monitors is a collection of Ceph monitors
+	Monitors []string `json:"monitors"`
+	// Optional: User is the rados user name, default is admin
+	User string `json:"user,omitempty"`
+	// Optional: SecretFile is the path to key ring for User, default is /etc/ceph/user.secret
+	SecretFile string `json:"secretFile,omitempty"`
+	// Optional: SecretRef is reference to the authentication secret for User, default is empty.
+	SecretRef *LocalObjectReference `json:"secretRef,omitempty"`
+	// Optional: Defaults to false (read/write). ReadOnly here will force
+	// the ReadOnly setting in VolumeMounts.
+	ReadOnly bool `json:"readOnly,omitempty"`
+}
+
+// DownwardAPIVolumeSource represents a volume containing downward API info
+type DownwardAPIVolumeSource struct {
+	// Items is a list of DownwardAPIVolume file
+	Items []DownwardAPIVolumeFile `json:"items,omitempty"`
+}
+
+// DownwardAPIVolumeFile represents a single file containing information from the downward API
+type DownwardAPIVolumeFile struct {
+	// Required: Path is  the relative path name of the file to be created. Must not be absolute or contain the '..' path. Must be utf-8 encoded. The first item of the relative path must not start with '..'
+	Path string `json:"path"`
+	// Required: Selects a field of the pod: only annotations, labels, name and  namespace are supported.
+	FieldRef ObjectFieldSelector `json:"fieldRef"`
 }
 
 // ContainerPort represents a network port in a single container
@@ -805,9 +864,7 @@ type ContainerState struct {
 
 type ContainerStatus struct {
 	// Each container in a pod must have a unique name.
-	Name string `json:"name"`
-	// TODO(dchen1107): Should we rename PodStatus to a more generic name or have a separate states
-	// defined for container?
+	Name                 string         `json:"name"`
 	State                ContainerState `json:"state,omitempty"`
 	LastTerminationState ContainerState `json:"lastState,omitempty"`
 	// Ready specifies whether the conatiner has passed its readiness check.
@@ -1055,54 +1112,6 @@ type ReplicationControllerList struct {
 	ListMeta `json:"metadata,omitempty"`
 
 	Items []ReplicationController `json:"items"`
-}
-
-// DaemonSpec is the specification of a daemon.
-type DaemonSpec struct {
-	// Selector is a label query over pods that are managed by the daemon.
-	Selector map[string]string `json:"selector"`
-
-	// Template is the object that describes the pod that will be created.
-	// The Daemon will create exactly one copy of this pod on every node
-	// that matches the template's node selector (or on every node if no node
-	// selector is specified).
-	Template *PodTemplateSpec `json:"template,omitempty"`
-}
-
-// DaemonStatus represents the current status of a daemon.
-type DaemonStatus struct {
-	// CurrentNumberScheduled is the number of nodes that are running exactly 1 copy of the
-	// daemon and are supposed to run the daemon.
-	CurrentNumberScheduled int `json:"currentNumberScheduled"`
-
-	// NumberMisscheduled is the number of nodes that are running the daemon, but are
-	// not supposed to run the daemon.
-	NumberMisscheduled int `json:"numberMisscheduled"`
-
-	// DesiredNumberScheduled is the total number of nodes that should be running the daemon
-	// (including nodes correctly running the daemon).
-	DesiredNumberScheduled int `json:"desiredNumberScheduled"`
-}
-
-// Daemon represents the configuration of a daemon.
-type Daemon struct {
-	TypeMeta   `json:",inline"`
-	ObjectMeta `json:"metadata,omitempty"`
-
-	// Spec defines the desired behavior of this daemon.
-	Spec DaemonSpec `json:"spec,omitempty"`
-
-	// Status is the current status of this daemon. This data may be
-	// out of date by some window of time.
-	Status DaemonStatus `json:"status,omitempty"`
-}
-
-// DaemonList is a collection of daemon.
-type DaemonList struct {
-	TypeMeta `json:",inline"`
-	ListMeta `json:"metadata,omitempty"`
-
-	Items []Daemon `json:"items"`
 }
 
 const (
@@ -1941,8 +1950,12 @@ type LimitRangeItem struct {
 	Max ResourceList `json:"max,omitempty"`
 	// Min usage constraints on this kind by resource name
 	Min ResourceList `json:"min,omitempty"`
-	// Default usage constraints on this kind by resource name
+	// Default resource requirement limit value by resource name.
 	Default ResourceList `json:"default,omitempty"`
+	// DefaultRequest resource requirement request value by resource name.
+	DefaultRequest ResourceList `json:"defaultRequest,omitempty"`
+	// MaxLimitRequestRatio represents the max burst value for the named resource
+	MaxLimitRequestRatio ResourceList `json:"maxLimitRequestRatio,omitempty"`
 }
 
 // LimitRangeSpec defines a min/max usage limit for resources that match on kind
@@ -1977,8 +1990,6 @@ const (
 	ResourceServices ResourceName = "services"
 	// ReplicationControllers, number
 	ResourceReplicationControllers ResourceName = "replicationcontrollers"
-	// Daemon, number
-	ResourceDaemon ResourceName = "daemon"
 	// ResourceQuotas, number
 	ResourceQuotas ResourceName = "resourcequotas"
 	// ResourceSecrets, number

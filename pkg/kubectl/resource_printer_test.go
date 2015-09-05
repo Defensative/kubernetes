@@ -28,6 +28,8 @@ import (
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/testapi"
+	"k8s.io/kubernetes/pkg/api/v1"
+	"k8s.io/kubernetes/pkg/expapi"
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/util"
 
@@ -47,7 +49,7 @@ func (ts *testStruct) IsAnAPIObject() {}
 
 func init() {
 	api.Scheme.AddKnownTypes("", &testStruct{})
-	api.Scheme.AddKnownTypes(testapi.Version(), &testStruct{})
+	api.Scheme.AddKnownTypes(testapi.Default.Version(), &testStruct{})
 }
 
 var testData = testStruct{
@@ -70,7 +72,7 @@ func TestVersionedPrinter(t *testing.T) {
 			return nil
 		}),
 		api.Scheme,
-		testapi.Version(),
+		testapi.Default.Version(),
 	)
 	if err := p.PrintObj(original, nil); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -101,7 +103,14 @@ func TestPrinter(t *testing.T) {
 	//test inputs
 	simpleTest := &TestPrintType{"foo"}
 	podTest := &api.Pod{ObjectMeta: api.ObjectMeta{Name: "foo"}}
-	testapi, err := api.Scheme.ConvertToVersion(podTest, testapi.Version())
+	podListTest := &api.PodList{
+		Items: []api.Pod{
+			{ObjectMeta: api.ObjectMeta{Name: "foo"}},
+			{ObjectMeta: api.ObjectMeta{Name: "bar"}},
+		},
+	}
+	emptyListTest := &api.PodList{}
+	testapi, err := api.Scheme.ConvertToVersion(podTest, testapi.Default.Version())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -118,6 +127,9 @@ func TestPrinter(t *testing.T) {
 		{"test template", "template", "{{if .id}}{{.id}}{{end}}{{if .metadata.name}}{{.metadata.name}}{{end}}",
 			podTest, "foo"},
 		{"test jsonpath", "jsonpath", "{.metadata.name}", podTest, "foo"},
+		{"test jsonpath list", "jsonpath", "{.items[*].metadata.name}", podListTest, "foo bar"},
+		{"test jsonpath empty list", "jsonpath", "{.items[*].metadata.name}", emptyListTest, ""},
+		{"test name", "name", "", podTest, "/foo\n"},
 		{"emits versioned objects", "template", "{{.kind}}", testapi, "Pod"},
 	}
 	for _, test := range printerTests {
@@ -130,7 +142,7 @@ func TestPrinter(t *testing.T) {
 			t.Errorf("unexpected error: %#v", err)
 		}
 		if buf.String() != test.Expect {
-			t.Errorf("in %s, expect %q, got %q", test.Name, test.Expect, buf.String(), buf.String())
+			t.Errorf("in %s, expect %q, got %q", test.Name, test.Expect, buf.String())
 		}
 	}
 
@@ -171,7 +183,7 @@ func testPrinter(t *testing.T, printer ResourcePrinter, unmarshalFunc func(data 
 	}
 	// Use real decode function to undo the versioning process.
 	poutput = testStruct{}
-	err = runtime.YAMLDecoder(testapi.Codec()).DecodeInto(buf.Bytes(), &poutput)
+	err = runtime.YAMLDecoder(testapi.Default.Codec()).DecodeInto(buf.Bytes(), &poutput)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +204,7 @@ func testPrinter(t *testing.T, printer ResourcePrinter, unmarshalFunc func(data 
 	}
 	// Use real decode function to undo the versioning process.
 	objOut = api.Pod{}
-	err = runtime.YAMLDecoder(testapi.Codec()).DecodeInto(buf.Bytes(), &objOut)
+	err = runtime.YAMLDecoder(testapi.Default.Codec()).DecodeInto(buf.Bytes(), &objOut)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,6 +281,52 @@ func TestTemplatePanic(t *testing.T) {
 	}
 	if buffer.String() == "" {
 		t.Errorf("no debugging info was printed")
+	}
+}
+
+func TestNamePrinter(t *testing.T) {
+	tests := map[string]struct {
+		obj    runtime.Object
+		expect string
+	}{
+		"singleObject": {
+			&api.Pod{
+				TypeMeta: api.TypeMeta{
+					Kind: "Pod",
+				},
+				ObjectMeta: api.ObjectMeta{
+					Name: "foo",
+				},
+			},
+			"pod/foo\n"},
+		"List": {
+			&v1.List{
+				TypeMeta: v1.TypeMeta{
+					Kind: "List",
+				},
+				Items: []runtime.RawExtension{
+					{
+						RawJSON: []byte(`{"kind": "Pod", "apiVersion": "v1", "metadata": { "name": "foo"}}`),
+					},
+					{
+						RawJSON: []byte(`{"kind": "Pod", "apiVersion": "v1", "metadata": { "name": "bar"}}`),
+					},
+				},
+			},
+			"pod/foo\npod/bar\n"},
+	}
+	printer, _, _ := GetPrinter("name", "")
+	for name, item := range tests {
+		buff := &bytes.Buffer{}
+		err := printer.PrintObj(item.obj, buff)
+		if err != nil {
+			t.Errorf("%v: unexpected err: %v", name, err)
+			continue
+		}
+		got := buff.String()
+		if item.expect != got {
+			t.Errorf("%v: expected %v, got %v", name, item.expect, got)
+		}
 	}
 }
 
@@ -372,7 +430,7 @@ func TestTemplateStrings(t *testing.T) {
 		t.Fatalf("tmpl fail: %v", err)
 	}
 
-	printer := NewVersionedPrinter(p, api.Scheme, testapi.Version())
+	printer := NewVersionedPrinter(p, api.Scheme, testapi.Default.Version())
 
 	for name, item := range table {
 		buffer := &bytes.Buffer{}
@@ -413,6 +471,7 @@ func TestPrinters(t *testing.T) {
 		"template":             templatePrinter,
 		"template2":            templatePrinter2,
 		"jsonpath":             jsonpathPrinter,
+		"name":                 &NamePrinter{},
 	}
 	objects := map[string]runtime.Object{
 		"pod":             &api.Pod{ObjectMeta: om("pod")},
@@ -1170,5 +1229,41 @@ func TestTranslateTimestamp(t *testing.T) {
 			t.Errorf("On %v, expected '%v', but got '%v'",
 				test.name, test.exp, test.got)
 		}
+	}
+}
+
+func TestPrintDeployment(t *testing.T) {
+	tests := []struct {
+		deployment expapi.Deployment
+		expect     string
+	}{
+		{
+			expapi.Deployment{
+				ObjectMeta: api.ObjectMeta{
+					Name:              "test1",
+					CreationTimestamp: util.Time{Time: time.Now().Add(1.9e9)},
+				},
+				Spec: expapi.DeploymentSpec{
+					Replicas: 5,
+					Template: &api.PodTemplateSpec{
+						Spec: api.PodSpec{Containers: make([]api.Container, 2)},
+					},
+				},
+				Status: expapi.DeploymentStatus{
+					Replicas:        10,
+					UpdatedReplicas: 2,
+				},
+			},
+			"test1\t2/5\t0s\n",
+		},
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	for _, test := range tests {
+		printDeployment(&test.deployment, buf, false, false, true, []string{})
+		if buf.String() != test.expect {
+			t.Fatalf("Expected: %s, got: %s", test.expect, buf.String())
+		}
+		buf.Reset()
 	}
 }

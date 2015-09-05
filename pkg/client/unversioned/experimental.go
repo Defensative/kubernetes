@@ -33,6 +33,9 @@ import (
 type ExperimentalInterface interface {
 	VersionInterface
 	HorizontalPodAutoscalersNamespacer
+	ScaleNamespacer
+	DaemonsNamespacer
+	DeploymentsNamespacer
 }
 
 // ExperimentalClient is used to interact with experimental Kubernetes features.
@@ -75,6 +78,18 @@ func (c *ExperimentalClient) HorizontalPodAutoscalers(namespace string) Horizont
 	return newHorizontalPodAutoscalers(c, namespace)
 }
 
+func (c *ExperimentalClient) Scales(namespace string) ScaleInterface {
+	return newScales(c, namespace)
+}
+
+func (c *ExperimentalClient) Daemons(namespace string) DaemonInterface {
+	return newDaemons(c, namespace)
+}
+
+func (c *ExperimentalClient) Deployments(namespace string) DeploymentInterface {
+	return newDeployments(c, namespace)
+}
+
 // NewExperimental creates a new ExperimentalClient for the given config. This client
 // provides access to experimental Kubernetes features.
 // Experimental features are not supported and may be changed or removed in
@@ -104,9 +119,7 @@ func NewExperimentalOrDie(c *Config) *ExperimentalClient {
 }
 
 func setExperimentalDefaults(config *Config) error {
-	if config.Prefix == "" {
-		config.Prefix = "/experimental"
-	}
+	config.Prefix = "/experimental"
 	if config.UserAgent == "" {
 		config.UserAgent = DefaultKubernetesUserAgent()
 	}

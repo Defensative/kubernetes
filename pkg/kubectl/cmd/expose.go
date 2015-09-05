@@ -27,6 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/resource"
 )
 
+// ExposeOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
+// referencing the cmd.Flags()
+type ExposeOptions struct {
+	Filenames []string
+}
+
 const (
 	expose_long = `Take a replicated application and expose it as Kubernetes Service.
 
@@ -34,13 +40,13 @@ Looks up a replication controller or service by name and uses the selector for t
 selector for a new Service on the specified port. If no labels are specified, the new service will
 re-use the labels from the resource it exposes.`
 
-	expose_example = `# Creates a service for a replicated nginx, which serves on port 80 and connects to the containers on port 8000.
+	expose_example = `# Create a service for a replicated nginx, which serves on port 80 and connects to the containers on port 8000.
 $ kubectl expose rc nginx --port=80 --target-port=8000
 
-# Creates a service for a replication controller identified by type and name specified in "nginx-controller.yaml", which serves on port 80 and connects to the containers on port 8000.
+# Create a service for a replication controller identified by type and name specified in "nginx-controller.yaml", which serves on port 80 and connects to the containers on port 8000.
 $ kubectl expose -f nginx-controller.yaml --port=80 --target-port=8000
 
-# Creates a second service based on the above service, exposing the container port 8443 as port 443 with the name "nginx-https"
+# Create a second service based on the above service, exposing the container port 8443 as port 443 with the name "nginx-https"
 $ kubectl expose service nginx --port=443 --target-port=8443 --name=nginx-https
 
 # Create a service for a replicated streaming application on port 4100 balancing UDP traffic and named 'video-stream'.
@@ -48,13 +54,15 @@ $ kubectl expose rc streamer --port=4100 --protocol=udp --name=video-stream`
 )
 
 func NewCmdExposeService(f *cmdutil.Factory, out io.Writer) *cobra.Command {
+	options := &ExposeOptions{}
+
 	cmd := &cobra.Command{
 		Use:     "expose (-f FILENAME | TYPE NAME) --port=port [--protocol=TCP|UDP] [--target-port=number-or-name] [--name=name] [----external-ip=external-ip-of-service] [--type=type]",
 		Short:   "Take a replicated application and expose it as Kubernetes Service",
 		Long:    expose_long,
 		Example: expose_example,
 		Run: func(cmd *cobra.Command, args []string) {
-			err := RunExpose(f, out, cmd, args)
+			err := RunExpose(f, out, cmd, args, options)
 			cmdutil.CheckErr(err)
 		},
 	}
@@ -63,8 +71,10 @@ func NewCmdExposeService(f *cmdutil.Factory, out io.Writer) *cobra.Command {
 	cmd.Flags().String("protocol", "TCP", "The network protocol for the service to be created. Default is 'tcp'.")
 	cmd.Flags().Int("port", -1, "The port that the service should serve on. Copied from the resource being exposed, if unspecified")
 	cmd.MarkFlagRequired("port")
-	cmd.Flags().String("type", "", "Type for this service: ClusterIP, NodePort, or LoadBalancer. Default is 'ClusterIP' unless --create-external-load-balancer is specified.")
+	cmd.Flags().String("type", "", "Type for this service: ClusterIP, NodePort, or LoadBalancer. Default is 'ClusterIP'.")
+	// TODO: remove create-external-load-balancer in code on or after Aug 25, 2016.
 	cmd.Flags().Bool("create-external-load-balancer", false, "If true, create an external load balancer for this service (trumped by --type). Implementation is cloud provider dependent. Default is 'false'.")
+	cmd.Flags().MarkDeprecated("create-external-load-balancer", "use --type=\"LoadBalancer\" instead")
 	cmd.Flags().String("selector", "", "A label selector to use for this service. If empty (the default) infer the selector from the replication controller.")
 	cmd.Flags().StringP("labels", "l", "", "Labels to apply to the service created by this call.")
 	cmd.Flags().Bool("dry-run", false, "If true, only print the object that would be sent, without creating it.")
@@ -76,11 +86,11 @@ func NewCmdExposeService(f *cmdutil.Factory, out io.Writer) *cobra.Command {
 	cmd.Flags().String("session-affinity", "", "If non-empty, set the session affinity for the service to this; legal values: 'None', 'ClientIP'")
 
 	usage := "Filename, directory, or URL to a file identifying the resource to expose a service"
-	kubectl.AddJsonFilenameFlag(cmd, usage)
+	kubectl.AddJsonFilenameFlag(cmd, &options.Filenames, usage)
 	return cmd
 }
 
-func RunExpose(f *cmdutil.Factory, out io.Writer, cmd *cobra.Command, args []string) error {
+func RunExpose(f *cmdutil.Factory, out io.Writer, cmd *cobra.Command, args []string, options *ExposeOptions) error {
 	namespace, enforceNamespace, err := f.DefaultNamespace()
 	if err != nil {
 		return err
@@ -90,14 +100,10 @@ func RunExpose(f *cmdutil.Factory, out io.Writer, cmd *cobra.Command, args []str
 	r := resource.NewBuilder(mapper, typer, f.ClientMapperForCommand()).
 		ContinueOnError().
 		NamespaceParam(namespace).DefaultNamespace().
-		FilenameParam(enforceNamespace, cmdutil.GetFlagStringSlice(cmd, "filename")...).
+		FilenameParam(enforceNamespace, options.Filenames...).
 		ResourceTypeOrNameArgs(false, args...).
 		Flatten().
 		Do()
-	err = r.Err()
-	if err != nil {
-		return err
-	}
 	infos, err := r.Infos()
 	if err != nil {
 		return err
@@ -109,11 +115,7 @@ func RunExpose(f *cmdutil.Factory, out io.Writer, cmd *cobra.Command, args []str
 	mapping := info.ResourceMapping()
 
 	// Get the input object
-	client, err := f.RESTClient(mapping)
-	if err != nil {
-		return err
-	}
-	inputObject, err := resource.NewHelper(client, mapping).Get(info.Namespace, info.Name)
+	inputObject, err := r.Object()
 	if err != nil {
 		return err
 	}

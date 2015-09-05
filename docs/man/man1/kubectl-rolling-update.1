@@ -35,10 +35,6 @@ existing replication controller and overwrite at least one (common) label in its
     Filename or URL to file to use to create the new replication controller.
 
 .PP
-\fB\-h\fP, \fB\-\-help\fP=false
-    help for rolling\-update
-
-.PP
 \fB\-\-image\fP=""
     Image to use for upgrading the replication controller.  Can not be used with \-\-filename/\-f
 
@@ -48,7 +44,7 @@ existing replication controller and overwrite at least one (common) label in its
 
 .PP
 \fB\-o\fP, \fB\-\-output\fP=""
-    Output format. One of: json|yaml|template|templatefile|wide|jsonpath.
+    Output format. One of: json|yaml|template|templatefile|wide|jsonpath|name.
 
 .PP
 \fB\-\-output\-version\fP=""
@@ -83,6 +79,10 @@ existing replication controller and overwrite at least one (common) label in its
 .PP
 \fB\-\-update\-period\fP=1m0s
     Time to wait between updating pods. Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+
+.PP
+\fB\-\-validate\fP=true
+    If true, use a schema to validate the input before sending it
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -173,10 +173,6 @@ existing replication controller and overwrite at least one (common) label in its
 .PP
 \fB\-\-v\fP=0
     log level for V logs
-
-.PP
-\fB\-\-validate\fP=false
-    If true, use a schema to validate the input before sending it
 
 .PP
 \fB\-\-vmodule\fP=

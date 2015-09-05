@@ -43,6 +43,7 @@ ENABLE_NODE_LOGGING: $(yaml-quote ${ENABLE_NODE_LOGGING:-false})
 LOGGING_DESTINATION: $(yaml-quote ${LOGGING_DESTINATION:-})
 ELASTICSEARCH_LOGGING_REPLICAS: $(yaml-quote ${ELASTICSEARCH_LOGGING_REPLICAS:-})
 ENABLE_CLUSTER_DNS: $(yaml-quote ${ENABLE_CLUSTER_DNS:-false})
+ENABLE_CLUSTER_REGISTRY: $(yaml-quote ${ENABLE_CLUSTER_REGISTRY:-false})
 DNS_REPLICAS: $(yaml-quote ${DNS_REPLICAS:-})
 DNS_SERVER_IP: $(yaml-quote ${DNS_SERVER_IP:-})
 DNS_DOMAIN: $(yaml-quote ${DNS_DOMAIN:-})
@@ -80,6 +81,7 @@ ENABLE_NODE_LOGGING=${ENABLE_NODE_LOGGING:-false}
 LOGGING_DESTINATION=${LOGGING_DESTINATION:-}
 ELASTICSEARCH_LOGGING_REPLICAS=${ELASTICSEARCH_LOGGING_REPLICAS:-}
 ENABLE_CLUSTER_DNS=${ENABLE_CLUSTER_DNS:-false}
+ENABLE_CLUSTER_REGISTRY=${ENABLE_CLUSTER_REGISTRY:-false})
 DNS_REPLICAS=${DNS_REPLICAS:-}
 DNS_SERVER_IP=${DNS_SERVER_IP:-}
 DNS_DOMAIN=${DNS_DOMAIN:-}
@@ -137,8 +139,8 @@ function create-master-instance {
 
 # TODO(dawnchen): Check $CONTAINER_RUNTIME to decide which
 # cloud_config yaml file should be passed
-# TODO(mbforbes): Make $1 required.
-# TODO(mbforbes): Document required vars (for this and call chain).
+# TODO(zmerlynn): Make $1 required.
+# TODO(zmerlynn): Document required vars (for this and call chain).
 # $1 version
 function create-node-instance-template {
   local suffix=""

@@ -31,8 +31,8 @@ import (
 	"k8s.io/kubernetes/pkg/util"
 	"k8s.io/kubernetes/pkg/util/wait"
 
-	"code.google.com/p/gcfg"
 	"github.com/golang/glog"
+	"github.com/scalingdata/gcfg"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
@@ -61,6 +61,7 @@ type GCECloud struct {
 type Config struct {
 	Global struct {
 		TokenURL    string `gcfg:"token-url"`
+		TokenBody   string `gcfg:"token-body"`
 		ProjectID   string `gcfg:"project-id"`
 		NetworkName string `gcfg:"network-name"`
 	}
@@ -159,7 +160,7 @@ func newGCECloud(config io.Reader) (*GCECloud, error) {
 			}
 		}
 		if cfg.Global.TokenURL != "" {
-			tokenSource = newAltTokenSource(cfg.Global.TokenURL)
+			tokenSource = newAltTokenSource(cfg.Global.TokenURL, cfg.Global.TokenBody)
 		}
 	}
 	client := oauth2.NewClient(oauth2.NoContext, tokenSource)
@@ -372,6 +373,9 @@ func makeFirewallName(name string) string {
 // TODO(a-robinson): Don't just ignore specified IP addresses. Check if they're
 // owned by the project and available to be used, and use them if they are.
 func EnsureLoadBalancer(gce *GCECloud, name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity, protocol string) (*api.LoadBalancerStatus, error) {
+	if len(hosts) == 0 {
+		return nil, fmt.Errorf("Cannot EnsureTCPLoadBalancer() with no hosts")
+	}
 	glog.V(2).Info("Checking if load balancer already exists: %s", name)
 
     var err error

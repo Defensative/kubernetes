@@ -35,10 +35,10 @@ import (
 const (
 	run_long = `Create and run a particular image, possibly replicated.
 Creates a replication controller to manage the created container(s).`
-	run_example = `# Starts a single instance of nginx.
+	run_example = `# Start a single instance of nginx.
 $ kubectl run nginx --image=nginx
 
-# Starts a replicated instance of nginx.
+# Start a replicated instance of nginx.
 $ kubectl run nginx --image=nginx --replicas=5
 
 # Dry run. Print the corresponding API objects without creating them.
@@ -220,7 +220,13 @@ func Run(f *cmdutil.Factory, cmdIn io.Reader, cmdOut, cmdErr io.Writer, cmd *cob
 			return fmt.Errorf("cannot attach to %s: not implemented", kind)
 		}
 	}
-	return f.PrintObject(cmd, obj, cmdOut)
+
+	outputFormat := cmdutil.GetFlagString(cmd, "output")
+	if outputFormat != "" {
+		return f.PrintObject(cmd, obj, cmdOut)
+	}
+	cmdutil.PrintSuccess(mapper, false, cmdOut, mapping.Resource, args[0], "created")
+	return nil
 }
 
 func waitForPodRunning(c *client.Client, pod *api.Pod, out io.Writer) error {

@@ -45,10 +45,6 @@ will be lost along with the rest of the resource.
     Period of time in seconds given to the resource to terminate gracefully. Ignored if negative.
 
 .PP
-\fB\-h\fP, \fB\-\-help\fP=false
-    help for delete
-
-.PP
 \fB\-\-ignore\-not\-found\fP=false
     Treat "resource not found" as a successful delete. Defaults to "true" when \-\-all is specified.
 
@@ -155,10 +151,6 @@ will be lost along with the rest of the resource.
     log level for V logs
 
 .PP
-\fB\-\-validate\fP=false
-    If true, use a schema to validate the input before sending it
-
-.PP
 \fB\-\-vmodule\fP=
     comma\-separated list of pattern=N settings for file\-filtered logging
 
@@ -173,6 +165,9 @@ $ kubectl delete \-f ./pod.json
 
 # Delete a pod based on the type and name in the JSON passed into stdin.
 $ cat pod.json | kubectl delete \-f \-
+
+# Delete pods and services with same names "baz" and "foo"
+$ kubectl delete pod,service baz foo
 
 # Delete pods and services with label name=myLabel.
 $ kubectl delete pods,services \-l name=myLabel

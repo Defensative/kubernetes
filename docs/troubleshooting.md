@@ -52,15 +52,15 @@ We also have a number of FAQ pages:
    * [Debugging FAQ](https://github.com/kubernetes/kubernetes/wiki/Debugging-FAQ)
    * [Services FAQ](https://github.com/kubernetes/kubernetes/wiki/Services-FAQ)
 
-You may also find the StackOverflow topics relevant:
+You may also find the Stack Overflow topics relevant:
    * [Kubernetes](http://stackoverflow.com/questions/tagged/kubernetes)
    * [Google Container Engine - GKE](http://stackoverflow.com/questions/tagged/google-container-engine)
 
 # Help! My question isn't covered!  I need help now!
 
-## Stackoverflow
+## Stack Overflow
 
-Someone else from the community may have already asked a similar question or may be able to help with your problem. The Kubernetes team will also monitor posts tagged kubernetes.
+Someone else from the community may have already asked a similar question or may be able to help with your problem. The Kubernetes team will also monitor [posts tagged kubernetes](http://stackoverflow.com/questions/tagged/kubernetes). If there aren't any existing questions that help, please [ask a new one](http://stackoverflow.com/questions/ask?tags=kubernetes)!
 
 ## IRC
 
@@ -76,7 +76,10 @@ If you have what looks like a bug, or you would like to make a feature request, 
 
 Before you file an issue, please search existing issues to see if your issue is already covered.
 
-If filing a bug, please include detailed information about how to reproduce the problem.
+If filing a bug, please include detailed information about how to reproduce the problem, such as:
+* Kubernetes version: `kubectl version`
+* Cloud provider, OS distro, network configuration, and Docker version
+* Steps to reproduce the problem
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/docs/troubleshooting.md?pixel)]()

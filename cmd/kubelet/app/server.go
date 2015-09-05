@@ -123,7 +123,8 @@ type KubeletServer struct {
 	PodCIDR                        string
 	MaxPods                        int
 	DockerExecHandlerName          string
-
+	ResolverConfig                 string
+	CPUCFSQuota                    bool
 	// Flags intended for testing
 
 	// Crash immediately, rather than eating panics.
@@ -188,6 +189,7 @@ func NewKubeletServer() *KubeletServer {
 		SystemContainer:             "",
 		ConfigureCBR0:               false,
 		DockerExecHandlerName:       "native",
+		CPUCFSQuota:                 false,
 	}
 }
 
@@ -221,8 +223,8 @@ func (s *KubeletServer) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.RunOnce, "runonce", s.RunOnce, "If true, exit after spawning pods from local manifests or remote urls. Exclusive with --api-servers, and --enable-server")
 	fs.BoolVar(&s.EnableDebuggingHandlers, "enable-debugging-handlers", s.EnableDebuggingHandlers, "Enables server endpoints for log collection and local running of containers and commands")
 	fs.DurationVar(&s.MinimumGCAge, "minimum-container-ttl-duration", s.MinimumGCAge, "Minimum age for a finished container before it is garbage collected.  Examples: '300ms', '10s' or '2h45m'")
-	fs.IntVar(&s.MaxPerPodContainerCount, "maximum-dead-containers-per-container", s.MaxPerPodContainerCount, "Maximum number of old instances of a container to retain per container.  Each container takes up some disk space.  Default: 2.")
-	fs.IntVar(&s.MaxContainerCount, "maximum-dead-containers", s.MaxContainerCount, "Maximum number of old instances of a containers to retain globally.  Each container takes up some disk space.  Default: 100.")
+	fs.IntVar(&s.MaxPerPodContainerCount, "maximum-dead-containers-per-container", s.MaxPerPodContainerCount, "Maximum number of old instances to retain per container.  Each container takes up some disk space.  Default: 2.")
+	fs.IntVar(&s.MaxContainerCount, "maximum-dead-containers", s.MaxContainerCount, "Maximum number of old instances of containers to retain globally.  Each container takes up some disk space.  Default: 100.")
 	fs.Var(&s.AuthPath, "auth-path", "Path to .kubernetes_auth file, specifying how to authenticate to API server.")
 	fs.MarkDeprecated("auth-path", "will be removed in a future version")
 	fs.Var(&s.KubeConfig, "kubeconfig", "Path to a kubeconfig file, specifying how to authenticate to API server (the master location is set by the api-servers flag).")
@@ -231,7 +233,7 @@ func (s *KubeletServer) AddFlags(fs *pflag.FlagSet) {
 	fs.IPVar(&s.HealthzBindAddress, "healthz-bind-address", s.HealthzBindAddress, "The IP address for the healthz server to serve on, defaulting to 127.0.0.1 (set to 0.0.0.0 for all interfaces)")
 	fs.IntVar(&s.OOMScoreAdj, "oom-score-adj", s.OOMScoreAdj, "The oom-score-adj value for kubelet process. Values must be within the range [-1000, 1000]")
 	fs.StringSliceVar(&s.APIServerList, "api-servers", []string{}, "List of Kubernetes API servers for publishing events, and reading pods and services. (ip:port), comma separated.")
-	fs.BoolVar(&s.RegisterNode, "register-node", s.RegisterNode, "Register the node with the apiserver (defaults to true if --api-server is set)")
+	fs.BoolVar(&s.RegisterNode, "register-node", s.RegisterNode, "Register the node with the apiserver (defaults to true if --api-servers is set)")
 	fs.StringVar(&s.ClusterDomain, "cluster-domain", s.ClusterDomain, "Domain for this cluster.  If set, kubelet will configure all containers to search this domain in addition to the host's search domains")
 	fs.StringVar(&s.MasterServiceNamespace, "master-service-namespace", s.MasterServiceNamespace, "The namespace from which the kubernetes master services should be injected into pods")
 	fs.IPVar(&s.ClusterDNS, "cluster-dns", s.ClusterDNS, "IP address for a cluster DNS server.  If set, kubelet will configure all containers to use this for DNS resolution in addition to the host's DNS servers")
@@ -253,6 +255,8 @@ func (s *KubeletServer) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&s.MaxPods, "max-pods", 40, "Number of Pods that can run on this Kubelet.")
 	fs.StringVar(&s.DockerExecHandlerName, "docker-exec-handler", s.DockerExecHandlerName, "Handler to use when executing a command in a container. Valid values are 'native' and 'nsenter'. Defaults to 'native'.")
 	fs.StringVar(&s.PodCIDR, "pod-cidr", "", "The CIDR to use for pod IP addresses, only used in standalone mode.  In cluster mode, this is obtained from the master.")
+	fs.StringVar(&s.ResolverConfig, "resolv-conf", kubelet.ResolvConfDefault, "Resolver configuration file used as the basis for the container DNS resolution configuration.")
+	fs.BoolVar(&s.CPUCFSQuota, "cpu-cfs-quota", s.CPUCFSQuota, "Enable CPU CFS quota enforcement for containers that specify CPU limits")
 	// Flags intended for testing, not recommended used in production environments.
 	fs.BoolVar(&s.ReallyCrashForTesting, "really-crash-for-testing", s.ReallyCrashForTesting, "If true, when panics occur crash. Intended for testing.")
 	fs.Float64Var(&s.ChaosChance, "chaos-chance", s.ChaosChance, "If > 0.0, introduce random client errors and latency. Intended for testing. [default=0.0]")
@@ -359,6 +363,8 @@ func (s *KubeletServer) KubeletConfig() (*KubeletConfig, error) {
 		PodCIDR:                   s.PodCIDR,
 		MaxPods:                   s.MaxPods,
 		DockerExecHandler:         dockerExecHandler,
+		ResolverConfig:            s.ResolverConfig,
+		CPUCFSQuota:               s.CPUCFSQuota,
 	}, nil
 }
 
@@ -417,12 +423,12 @@ func (s *KubeletServer) Run(kcfg *KubeletConfig) error {
 
 	if s.HealthzPort > 0 {
 		healthz.DefaultHealthz()
-		go util.Forever(func() {
+		go util.Until(func() {
 			err := http.ListenAndServe(net.JoinHostPort(s.HealthzBindAddress.String(), strconv.Itoa(s.HealthzPort)), nil)
 			if err != nil {
 				glog.Errorf("Starting health server failed: %v", err)
 			}
-		}, 5*time.Second)
+		}, 5*time.Second, util.NeverStop)
 	}
 
 	if s.RunOnce {
@@ -600,6 +606,8 @@ func SimpleKubelet(client *client.Client,
 		SystemContainer:           "",
 		MaxPods:                   32,
 		DockerExecHandler:         &dockertools.NativeExecHandler{},
+		ResolverConfig:            kubelet.ResolvConfDefault,
+		CPUCFSQuota:               false,
 	}
 	return &kcfg
 }
@@ -642,7 +650,11 @@ func RunKubelet(kcfg *KubeletConfig, builder KubeletBuilder) error {
 	} else {
 		glog.Warning("No api server defined - no events will be sent to API server.")
 	}
-	capabilities.Setup(kcfg.AllowPrivileged, kcfg.HostNetworkSources, 0)
+
+	privilegedSources := capabilities.PrivilegedSources{
+		HostNetworkSources: kcfg.HostNetworkSources,
+	}
+	capabilities.Setup(kcfg.AllowPrivileged, privilegedSources, 0)
 
 	credentialprovider.SetPreferredDockercfgPath(kcfg.RootDirectory)
 
@@ -671,24 +683,24 @@ func RunKubelet(kcfg *KubeletConfig, builder KubeletBuilder) error {
 
 func startKubelet(k KubeletBootstrap, podCfg *config.PodConfig, kc *KubeletConfig) {
 	// start the kubelet
-	go util.Forever(func() { k.Run(podCfg.Updates()) }, 0)
+	go util.Until(func() { k.Run(podCfg.Updates()) }, 0, util.NeverStop)
 
 	// start the kubelet server
 	if kc.EnableServer {
-		go util.Forever(func() {
+		go util.Until(func() {
 			k.ListenAndServe(kc.Address, kc.Port, kc.TLSOptions, kc.EnableDebuggingHandlers)
-		}, 0)
+		}, 0, util.NeverStop)
 	}
 	if kc.ReadOnlyPort > 0 {
-		go util.Forever(func() {
+		go util.Until(func() {
 			k.ListenAndServeReadOnly(kc.Address, kc.ReadOnlyPort)
-		}, 0)
+		}, 0, util.NeverStop)
 	}
 }
 
 func makePodSourceConfig(kc *KubeletConfig) *config.PodConfig {
 	// source of all configuration
-	cfg := config.NewPodConfig(config.PodConfigNotificationSnapshotAndUpdates, kc.Recorder)
+	cfg := config.NewPodConfig(config.PodConfigNotificationIncremental, kc.Recorder)
 
 	// define file config source
 	if kc.ConfigFile != "" {
@@ -765,6 +777,8 @@ type KubeletConfig struct {
 	PodCIDR                        string
 	MaxPods                        int
 	DockerExecHandler              dockertools.ExecHandler
+	ResolverConfig                 string
+	CPUCFSQuota                    bool
 }
 
 func createAndInitKubelet(kc *KubeletConfig) (k KubeletBootstrap, pc *config.PodConfig, err error) {
@@ -823,7 +837,9 @@ func createAndInitKubelet(kc *KubeletConfig) (k KubeletBootstrap, pc *config.Pod
 		kc.ConfigureCBR0,
 		kc.PodCIDR,
 		kc.MaxPods,
-		kc.DockerExecHandler)
+		kc.DockerExecHandler,
+		kc.ResolverConfig,
+		kc.CPUCFSQuota)
 
 	if err != nil {
 		return nil, nil, err

@@ -680,12 +680,6 @@ __EOF__
   kubectl delete pod valid-pod "${kube_flags[@]}"
   kubectl delete service frontend{,-2,-3,-4,-5} "${kube_flags[@]}"
 
-  ### Perform a rolling update with --image
-  # Command
-  kubectl rolling-update frontend --image=kubernetes/pause --update-period=10ns --poll-interval=10ms "${kube_flags[@]}"
-  # Post-condition: current image IS kubernetes/pause
-  kube::test::get_object_assert 'rc frontend' '{{range \$c:=$rc_container_image_field}} {{\$c.image}} {{end}}' ' +kubernetes/pause +'
-
   ### Delete replication controller with id
   # Pre-condition: frontend replication controller is running
   kube::test::get_object_assert rc "{{range.items}}{{$id_field}}:{{end}}" 'frontend:'
@@ -807,8 +801,8 @@ __EOF__
     file="${KUBE_TEMP}/schema-${version}.json"
     curl -s "http://127.0.0.1:${API_PORT}/swaggerapi/api/${version}" > "${file}"
     [[ "$(grep "list of returned" "${file}")" ]]
-    [[ "$(grep "list of pods" "${file}")" ]]
-    [[ "$(grep "watch for changes to the described resources" "${file}")" ]]
+    [[ "$(grep "List of pods" "${file}")" ]]
+    [[ "$(grep "Watch for changes to the described resources" "${file}")" ]]
   fi
 
   kube::test::clear_all

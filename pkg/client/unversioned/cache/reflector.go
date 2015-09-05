@@ -135,7 +135,7 @@ outer:
 // Run starts a watch and handles watch events. Will restart the watch if it is closed.
 // Run starts a goroutine and returns immediately.
 func (r *Reflector) Run() {
-	go util.Forever(func() { r.ListAndWatch(util.NeverStop) }, r.period)
+	go util.Until(func() { r.ListAndWatch(util.NeverStop) }, r.period, util.NeverStop)
 }
 
 // RunUntil starts a watch and handles watch events. Will restart the watch if it is closed.
@@ -234,12 +234,7 @@ func (r *Reflector) syncWith(items []runtime.Object, resourceVersion string) err
 	for _, item := range items {
 		found = append(found, item)
 	}
-
-	myStore, ok := r.store.(*WatchCache)
-	if ok {
-		return myStore.ReplaceWithVersion(found, resourceVersion)
-	}
-	return r.store.Replace(found)
+	return r.store.Replace(found, resourceVersion)
 }
 
 // watchHandler watches w and keeps *resourceVersion up to date.
