@@ -27,8 +27,8 @@ import (
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/resource"
 	"k8s.io/kubernetes/pkg/runtime"
-	"k8s.io/kubernetes/pkg/util"
 	"k8s.io/kubernetes/pkg/util/errors"
+	"k8s.io/kubernetes/pkg/util/validation"
 )
 
 // LabelOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
@@ -65,6 +65,8 @@ $ kubectl label pods foo bar-`
 
 func NewCmdLabel(f *cmdutil.Factory, out io.Writer) *cobra.Command {
 	options := &LabelOptions{}
+
+	// retrieve a list of handled resources from printer as valid args
 	validArgs := []string{}
 	p, err := f.Printer(nil, false, false, false, false, []string{})
 	cmdutil.CheckErr(err)
@@ -75,7 +77,7 @@ func NewCmdLabel(f *cmdutil.Factory, out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "label [--overwrite] (-f FILENAME | TYPE NAME) KEY_1=VAL_1 ... KEY_N=VAL_N [--resource-version=version]",
 		Short:   "Update the labels on a resource",
-		Long:    fmt.Sprintf(label_long, util.LabelValueMaxLength),
+		Long:    fmt.Sprintf(label_long, validation.LabelValueMaxLength),
 		Example: label_example,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := RunLabel(f, out, cmd, args, options)
@@ -111,7 +113,7 @@ func parseLabels(spec []string) (map[string]string, []string, error) {
 	for _, labelSpec := range spec {
 		if strings.Index(labelSpec, "=") != -1 {
 			parts := strings.Split(labelSpec, "=")
-			if len(parts) != 2 || len(parts[1]) == 0 || !util.IsValidLabelValue(parts[1]) {
+			if len(parts) != 2 || len(parts[1]) == 0 || !validation.IsValidLabelValue(parts[1]) {
 				return nil, nil, fmt.Errorf("invalid label spec: %v", labelSpec)
 			}
 			labels[parts[0]] = parts[1]
@@ -242,11 +244,10 @@ func RunLabel(f *cmdutil.Factory, out io.Writer, cmd *cobra.Command, args []stri
 			}
 		}
 		outputFormat := cmdutil.GetFlagString(cmd, "output")
-		if outputFormat == "" {
-			cmdutil.PrintSuccess(mapper, false, out, info.Mapping.Resource, info.Name, "labeled")
-		} else {
+		if outputFormat != "" {
 			return f.PrintObject(cmd, outputObj, out)
 		}
+		cmdutil.PrintSuccess(mapper, false, out, info.Mapping.Resource, info.Name, "labeled")
 		return nil
 	})
 }

@@ -39,7 +39,6 @@ import (
 	"k8s.io/kubernetes/pkg/capabilities"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/cloudprovider"
-	explatest "k8s.io/kubernetes/pkg/expapi/latest"
 	"k8s.io/kubernetes/pkg/master"
 	"k8s.io/kubernetes/pkg/master/ports"
 	"k8s.io/kubernetes/pkg/storage"
@@ -57,7 +56,7 @@ const (
 	// Set to a value larger than the timeouts in each watch server.
 	ReadWriteTimeout = time.Minute * 60
 	//TODO: This can be tightened up. It still matches objects named watch or proxy.
-	defaultLongRunningRequestRE = "(/|^)((watch|proxy)(/|$)|(logs|portforward|exec)/?$)"
+	defaultLongRunningRequestRE = "(/|^)((watch|proxy)(/|$)|(logs?|portforward|exec|attach)/?$)"
 )
 
 // APIServer runs a kubernetes api server.
@@ -68,13 +67,11 @@ type APIServer struct {
 	AdvertiseAddress           net.IP
 	SecurePort                 int
 	ExternalHost               string
-	APIRate                    float32
-	APIBurst                   int
 	TLSCertFile                string
 	TLSPrivateKeyFile          string
 	CertDirectory              string
 	APIPrefix                  string
-	ExpAPIPrefix               string
+	APIGroupPrefix             string
 	StorageVersion             string
 	ExpStorageVersion          string
 	CloudProvider              string
@@ -123,10 +120,8 @@ func NewAPIServer() *APIServer {
 		InsecureBindAddress:    net.ParseIP("127.0.0.1"),
 		BindAddress:            net.ParseIP("0.0.0.0"),
 		SecurePort:             6443,
-		APIRate:                10.0,
-		APIBurst:               200,
 		APIPrefix:              "/api",
-		ExpAPIPrefix:           "/experimental",
+		APIGroupPrefix:         "/apis",
 		EventTTL:               1 * time.Hour,
 		AuthorizationMode:      "AlwaysAllow",
 		AdmissionControl:       "AlwaysAdmit",
@@ -177,8 +172,6 @@ func (s *APIServer) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&s.SecurePort, "secure-port", s.SecurePort, ""+
 		"The port on which to serve HTTPS with authentication and authorization. If 0, "+
 		"don't serve HTTPS at all.")
-	fs.Float32Var(&s.APIRate, "api-rate", s.APIRate, "API rate limit as QPS for the read only port")
-	fs.IntVar(&s.APIBurst, "api-burst", s.APIBurst, "API burst amount for the read only port")
 	fs.StringVar(&s.TLSCertFile, "tls-cert-file", s.TLSCertFile, ""+
 		"File containing x509 Certificate for HTTPS.  (CA cert, if any, concatenated after server cert). "+
 		"If HTTPS serving is enabled, and --tls-cert-file and --tls-private-key-file are not provided, "+
@@ -187,7 +180,7 @@ func (s *APIServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.CertDirectory, "cert-dir", s.CertDirectory, "The directory where the TLS certs are located (by default /var/run/kubernetes). "+
 		"If --tls-cert-file and --tls-private-key-file are provided, this flag will be ignored.")
 	fs.StringVar(&s.APIPrefix, "api-prefix", s.APIPrefix, "The prefix for API requests on the server. Default '/api'.")
-	fs.StringVar(&s.ExpAPIPrefix, "experimental-prefix", s.ExpAPIPrefix, "The prefix for experimental API requests on the server. Default '/experimental'.")
+	fs.MarkDeprecated("api-prefix", "--api-prefix is deprecated and will be removed when the v1 API is retired")
 	fs.StringVar(&s.StorageVersion, "storage-version", s.StorageVersion, "The version to store resources with. Defaults to server preferred")
 	fs.StringVar(&s.CloudProvider, "cloud-provider", s.CloudProvider, "The provider for cloud services.  Empty string for no provider.")
 	fs.StringVar(&s.CloudConfigFile, "cloud-config", s.CloudConfigFile, "The path to the cloud provider configuration file.  Empty string for no configuration file.")
@@ -236,7 +229,7 @@ func (s *APIServer) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.KubeletConfig.EnableHttps, "kubelet-https", s.KubeletConfig.EnableHttps, "Use https for kubelet connections")
 	fs.UintVar(&s.KubeletConfig.Port, "kubelet-port", s.KubeletConfig.Port, "Kubelet port")
 	fs.DurationVar(&s.KubeletConfig.HTTPTimeout, "kubelet-timeout", s.KubeletConfig.HTTPTimeout, "Timeout for kubelet operations")
-	fs.StringVar(&s.KubeletConfig.CertFile, "kubelet-client-certificate", s.KubeletConfig.CertFile, "Path to a client key file for TLS.")
+	fs.StringVar(&s.KubeletConfig.CertFile, "kubelet-client-certificate", s.KubeletConfig.CertFile, "Path to a client cert file for TLS.")
 	fs.StringVar(&s.KubeletConfig.KeyFile, "kubelet-client-key", s.KubeletConfig.KeyFile, "Path to a client key file for TLS.")
 	fs.StringVar(&s.KubeletConfig.CAFile, "kubelet-certificate-authority", s.KubeletConfig.CAFile, "Path to a cert. file for the certificate authority.")
 }
@@ -299,6 +292,7 @@ func (s *APIServer) Run(_ []string) error {
 		// TODO(vmarmol): Implement support for HostNetworkSources.
 		PrivilegedSources: capabilities.PrivilegedSources{
 			HostNetworkSources: []string{},
+			HostPIDSources:     []string{},
 		},
 		PerConnectionBandwidthLimitBytesPerSec: s.MaxConnectionBytesPerSec,
 	})
@@ -346,13 +340,21 @@ func (s *APIServer) Run(_ []string) error {
 		glog.Fatalf("Invalid server address: %v", err)
 	}
 
-	etcdStorage, err := newEtcd(s.EtcdConfigFile, s.EtcdServerList, latest.InterfacesFor, latest.Version, s.StorageVersion, s.EtcdPathPrefix)
+	etcdStorage, err := newEtcd(s.EtcdConfigFile, s.EtcdServerList, latest.GroupOrDie("").InterfacesFor, latest.GroupOrDie("").Version, s.StorageVersion, s.EtcdPathPrefix)
 	if err != nil {
 		glog.Fatalf("Invalid storage version or misconfigured etcd: %v", err)
 	}
-	expEtcdStorage, err := newEtcd(s.EtcdConfigFile, s.EtcdServerList, explatest.InterfacesFor, explatest.Version, s.ExpStorageVersion, s.EtcdPathPrefix)
-	if err != nil {
-		glog.Fatalf("Invalid experimental storage version or misconfigured etcd: %v", err)
+
+	var expEtcdStorage storage.Interface
+	if enableExp {
+		g, err := latest.Group("experimental")
+		if err != nil {
+			glog.Fatalf("experimental API is enabled in runtime config, but not enabled in the environment variable KUBE_API_VERSIONS. Error: %v", err)
+		}
+		expEtcdStorage, err = newEtcd(s.EtcdConfigFile, s.EtcdServerList, g.InterfacesFor, g.Version, s.ExpStorageVersion, s.EtcdPathPrefix)
+		if err != nil {
+			glog.Fatalf("Invalid experimental storage version or misconfigured etcd: %v", err)
+		}
 	}
 
 	n := s.ServiceClusterIPRange
@@ -436,7 +438,7 @@ func (s *APIServer) Run(_ []string) error {
 		EnableWatchCache:       s.EnableWatchCache,
 		EnableIndex:            true,
 		APIPrefix:              s.APIPrefix,
-		ExpAPIPrefix:           s.ExpAPIPrefix,
+		APIGroupPrefix:         s.APIGroupPrefix,
 		CorsAllowedOriginList:  s.CorsAllowedOriginList,
 		ReadWritePort:          s.SecurePort,
 		PublicAddress:          s.AdvertiseAddress,
@@ -505,23 +507,24 @@ func (s *APIServer) Run(_ []string) error {
 		}
 
 		glog.Infof("Serving securely on %s", secureLocation)
+		if s.TLSCertFile == "" && s.TLSPrivateKeyFile == "" {
+			s.TLSCertFile = path.Join(s.CertDirectory, "apiserver.crt")
+			s.TLSPrivateKeyFile = path.Join(s.CertDirectory, "apiserver.key")
+			// TODO (cjcullen): Is PublicAddress the right address to sign a cert with?
+			alternateIPs := []net.IP{config.ServiceReadWriteIP}
+			alternateDNS := []string{"kubernetes.default.svc", "kubernetes.default", "kubernetes"}
+			// It would be nice to set a fqdn subject alt name, but only the kubelets know, the apiserver is clueless
+			// alternateDNS = append(alternateDNS, "kubernetes.default.svc.CLUSTER.DNS.NAME")
+			if err := util.GenerateSelfSignedCert(config.PublicAddress.String(), s.TLSCertFile, s.TLSPrivateKeyFile, alternateIPs, alternateDNS); err != nil {
+				glog.Errorf("Unable to generate self signed cert: %v", err)
+			} else {
+				glog.Infof("Using self-signed cert (%s, %s)", s.TLSCertFile, s.TLSPrivateKeyFile)
+			}
+		}
+
 		go func() {
 			defer util.HandleCrash()
 			for {
-				if s.TLSCertFile == "" && s.TLSPrivateKeyFile == "" {
-					s.TLSCertFile = path.Join(s.CertDirectory, "apiserver.crt")
-					s.TLSPrivateKeyFile = path.Join(s.CertDirectory, "apiserver.key")
-					// TODO (cjcullen): Is PublicAddress the right address to sign a cert with?
-					alternateIPs := []net.IP{config.ServiceReadWriteIP}
-					alternateDNS := []string{"kubernetes.default.svc", "kubernetes.default", "kubernetes"}
-					// It would be nice to set a fqdn subject alt name, but only the kubelets know, the apiserver is clueless
-					// alternateDNS = append(alternateDNS, "kubernetes.default.svc.CLUSTER.DNS.NAME")
-					if err := util.GenerateSelfSignedCert(config.PublicAddress.String(), s.TLSCertFile, s.TLSPrivateKeyFile, alternateIPs, alternateDNS); err != nil {
-						glog.Errorf("Unable to generate self signed cert: %v", err)
-					} else {
-						glog.Infof("Using self-signed cert (%s, %s)", s.TLSCertFile, s.TLSPrivateKeyFile)
-					}
-				}
 				// err == systemd.SdNotifyNoSocket when not running on a systemd system
 				if err := systemd.SdNotify("READY=1\n"); err != nil && err != systemd.SdNotifyNoSocket {
 					glog.Errorf("Unable to send systemd daemon successful start message: %v\n", err)

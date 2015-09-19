@@ -26,9 +26,9 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/errors"
+	"k8s.io/kubernetes/pkg/client/cache"
+	"k8s.io/kubernetes/pkg/client/record"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/cache"
-	"k8s.io/kubernetes/pkg/client/unversioned/record"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/types"
@@ -247,14 +247,14 @@ func (s *ServiceController) processDelta(delta *cache.Delta) (error, bool) {
 	case cache.Sync:
 		err, retry := s.createLoadBalancerIfNeeded(namespacedName, service, cachedService.appliedState)
 		if err != nil {
-			message := "error creating load balancer"
+			message := "Error creating load balancer"
 			if retry {
 				message += " (will retry): "
 			} else {
 				message += " (will not retry): "
 			}
 			message += err.Error()
-			s.eventRecorder.Event(service, "creating loadbalancer failed", message)
+			s.eventRecorder.Event(service, "CreatingLoadBalancerFailed", message)
 			return err, retry
 		}
 		// Always update the cache upon success.
@@ -281,7 +281,14 @@ func (s *ServiceController) processDelta(delta *cache.Delta) (error, bool) {
 			s.eventRecorder.Event(service, "deleting loadbalancer failed", message)
             return err, retryable
         }
-		s.eventRecorder.Event(service, "deleted loadbalancer", "deleted loadbalancer")
+		s.eventRecorder.Event(service, "DeletingLoadBalancer", "Deleting load balancer")
+		err := s.balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region)
+		if err != nil {
+			message := "Error deleting load balancer (will retry): " + err.Error()
+			s.eventRecorder.Event(service, "DeletingLoadBalancerFailed", message)
+			return err, retryable
+		}
+		s.eventRecorder.Event(service, "DeletedLoadBalancer", "Deleted load balancer")
 		s.cache.delete(namespacedName.String())
 	default:
 		glog.Errorf("Unexpected delta type: %v", delta.Type)
@@ -334,7 +341,6 @@ func (s *ServiceController) createLoadBalancerIfNeeded(namespacedName types.Name
 
 		if needDelete {
 			glog.Infof("Deleting existing load balancer for service %s that no longer needs a load balancer.", namespacedName)
-			s.eventRecorder.Event(service, "deleting loadbalancer", "deleting loadbalancer")
 
             var err error
             if tcp {
@@ -345,7 +351,11 @@ func (s *ServiceController) createLoadBalancerIfNeeded(namespacedName types.Name
             if err != nil {
                 return err, retryable
             }
-			s.eventRecorder.Event(service, "deleted loadbalancer", "deleted loadbalancer")
+			s.eventRecorder.Event(service, "DeletingLoadBalancer", "Deleting load balancer")
+			if err := s.balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region); err != nil {
+				return err, retryable
+			}
+			s.eventRecorder.Event(service, "DeletedLoadBalancer", "Deleted load balancer")
 		}
 
 		service.Status.LoadBalancer = api.LoadBalancerStatus{}
@@ -355,12 +365,12 @@ func (s *ServiceController) createLoadBalancerIfNeeded(namespacedName types.Name
 		// TODO: We could do a dry-run here if wanted to avoid the spurious cloud-calls & events when we restart
 
 		// The load balancer doesn't exist yet, so create it.
-		s.eventRecorder.Event(service, "creating loadbalancer", "creating loadbalancer")
+		s.eventRecorder.Event(service, "CreatingLoadBalancer", "Creating load balancer")
 		err := s.createExternalLoadBalancer(service)
 		if err != nil {
 			return fmt.Errorf("failed to create external load balancer for service %s: %v", namespacedName, err), retryable
 		}
-		s.eventRecorder.Event(service, "created loadbalancer", "created loadbalancer")
+		s.eventRecorder.Event(service, "CreatedLoadBalancer", "Created load balancer")
 	}
 
 	// Write the state if changed
@@ -453,6 +463,7 @@ func (s *ServiceController) createExternalLoadBalancer(service *api.Service) err
 			service.Status.LoadBalancer = *status
 		}
 	}
+
 	return nil
 }
 
@@ -528,6 +539,9 @@ func needsUpdate(oldService *api.Service, newService *api.Service) bool {
 		return true
 	}
 	if !portsEqualForLB(oldService, newService) || oldService.Spec.SessionAffinity != newService.Spec.SessionAffinity {
+		return true
+	}
+	if !loadBalancerIPsAreEqual(oldService, newService) {
 		return true
 	}
 	if len(oldService.Spec.ExternalIPs) != len(newService.Spec.ExternalIPs) {
@@ -756,7 +770,7 @@ func (s *ServiceController) lockedUpdateLoadBalancerHosts(service *api.Service, 
         err = s.udp_balancer.UpdateUDPLoadBalancer(name, s.zone.Region, hosts)
     }
 	if err == nil {
-		s.eventRecorder.Event(service, "updated loadbalancer", "updated loadbalancer with new hosts")
+		s.eventRecorder.Event(service, "UpdatedLoadBalancer", "Updated load balancer with new hosts")
 		return nil
 	}
 
@@ -773,11 +787,14 @@ func (s *ServiceController) lockedUpdateLoadBalancerHosts(service *api.Service, 
         return nil
     }
 
-	message := "error updating loadbalancer with new hosts: " + err.Error()
-	s.eventRecorder.Event(service, "updating loadbalancer failed", message)
+	s.eventRecorder.Eventf(service, "LoadBalancerUpdateFailed", "Error updating load balancer with new hosts: %v", err)
 	return err
 }
 
 func wantsExternalLoadBalancer(service *api.Service) bool {
 	return service.Spec.Type == api.ServiceTypeLoadBalancer
+}
+
+func loadBalancerIPsAreEqual(oldService, newService *api.Service) bool {
+	return oldService.Spec.LoadBalancerIP == newService.Spec.LoadBalancerIP
 }

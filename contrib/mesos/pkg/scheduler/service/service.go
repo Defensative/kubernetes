@@ -45,6 +45,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 	"golang.org/x/net/context"
+
 	"k8s.io/kubernetes/contrib/mesos/pkg/archive"
 	"k8s.io/kubernetes/contrib/mesos/pkg/election"
 	execcfg "k8s.io/kubernetes/contrib/mesos/pkg/executor/config"
@@ -64,6 +65,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/resource"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	clientauth "k8s.io/kubernetes/pkg/client/unversioned/auth"
+	"k8s.io/kubernetes/pkg/healthz"
 	"k8s.io/kubernetes/pkg/master/ports"
 	etcdstorage "k8s.io/kubernetes/pkg/storage/etcd"
 	"k8s.io/kubernetes/pkg/tools"
@@ -75,9 +77,8 @@ const (
 	defaultReconcileInterval = 300    // 5m default task reconciliation interval
 	defaultReconcileCooldown = 15 * time.Second
 	defaultFrameworkName     = "Kubernetes"
-
-	executorCPUs = mresource.CPUShares(0.25) // initial CPU allocated for executor
-	executorMem  = mresource.MegaBytes(64.0) // initial memory allocated for executor
+	defaultExecutorCPUs      = mresource.CPUShares(0.25)  // initial CPU allocated for executor
+	defaultExecutorMem       = mresource.MegaBytes(128.0) // initial memory allocated for executor
 )
 
 type SchedulerServer struct {
@@ -97,6 +98,8 @@ type SchedulerServer struct {
 	MesosAuthPrincipal  string
 	MesosAuthSecretFile string
 	MesosCgroupPrefix   string
+	MesosExecutorCPUs   mresource.CPUShares
+	MesosExecutorMem    mresource.MegaBytes
 	Checkpoint          bool
 	FailoverTimeout     float64
 
@@ -177,6 +180,8 @@ func NewSchedulerServer() *SchedulerServer {
 		MesosCgroupPrefix:      minioncfg.DefaultCgroupPrefix,
 		MesosMaster:            defaultMesosMaster,
 		MesosUser:              defaultMesosUser,
+		MesosExecutorCPUs:      defaultExecutorCPUs,
+		MesosExecutorMem:       defaultExecutorMem,
 		ReconcileInterval:      defaultReconcileInterval,
 		ReconcileCooldown:      defaultReconcileCooldown,
 		Checkpoint:             true,
@@ -221,6 +226,8 @@ func (s *SchedulerServer) addCoreFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.MesosAuthProvider, "mesos-authentication-provider", s.MesosAuthProvider, fmt.Sprintf("Authentication provider to use, default is SASL that supports mechanisms: %+v", mech.ListSupported()))
 	fs.StringVar(&s.DockerCfgPath, "dockercfg-path", s.DockerCfgPath, "Path to a dockercfg file that will be used by the docker instance of the minions.")
 	fs.StringVar(&s.MesosCgroupPrefix, "mesos-cgroup-prefix", s.MesosCgroupPrefix, "The cgroup prefix concatenated with MESOS_DIRECTORY must give the executor cgroup set by Mesos")
+	fs.Var(&s.MesosExecutorCPUs, "mesos-executor-cpus", "Initial CPU shares to allocate for each Mesos executor container.")
+	fs.Var(&s.MesosExecutorMem, "mesos-executor-mem", "Initial memory (MB) to allocate for each Mesos executor container.")
 	fs.BoolVar(&s.Checkpoint, "checkpoint", s.Checkpoint, "Enable/disable checkpointing for the kubernetes-mesos framework.")
 	fs.Float64Var(&s.FailoverTimeout, "failover-timeout", s.FailoverTimeout, fmt.Sprintf("Framework failover timeout, in sec."))
 	fs.UintVar(&s.DriverPort, "driver-port", s.DriverPort, "Port that the Mesos scheduler driver process should listen on.")
@@ -452,8 +459,8 @@ func (s *SchedulerServer) prepareExecutorInfo(hks hyperkube.Interface) (*mesos.E
 	}
 
 	execInfo.Resources = []*mesos.Resource{
-		mutil.NewScalarResource("cpus", float64(executorCPUs)+staticPodCPUs),
-		mutil.NewScalarResource("mem", float64(executorMem)+staticPodMem),
+		mutil.NewScalarResource("cpus", float64(s.MesosExecutorCPUs)+staticPodCPUs),
+		mutil.NewScalarResource("mem", float64(s.MesosExecutorMem)+staticPodMem),
 	}
 
 	// calculate ExecutorInfo hash to be used for validating compatibility
@@ -625,6 +632,7 @@ func (s *SchedulerServer) bootstrap(hks hyperkube.Interface, sc *schedcfg.Config
 	metrics.Register()
 	runtime.Register()
 	s.mux.Handle("/metrics", prometheus.Handler())
+	healthz.InstallHandler(s.mux)
 
 	if (s.EtcdConfigFile != "" && len(s.EtcdServerList) != 0) || (s.EtcdConfigFile == "" && len(s.EtcdServerList) == 0) {
 		log.Fatalf("specify either --etcd-servers or --etcd-config")

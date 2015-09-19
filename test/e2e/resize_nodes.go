@@ -25,6 +25,7 @@ import (
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/latest"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
@@ -183,9 +184,9 @@ func rcByNameContainer(name string, replicas int, image string, labels map[strin
 	// Add "name": name to the labels, overwriting if it exists.
 	labels["name"] = name
 	return &api.ReplicationController{
-		TypeMeta: api.TypeMeta{
+		TypeMeta: unversioned.TypeMeta{
 			Kind:       "ReplicationController",
-			APIVersion: latest.Version,
+			APIVersion: latest.GroupOrDie("").Version,
 		},
 		ObjectMeta: api.ObjectMeta{
 			Name: name,
@@ -522,9 +523,12 @@ var _ = Describe("Nodes", func() {
 				By(fmt.Sprintf("block network traffic from node %s", node.Name))
 				performTemporaryNetworkFailure(c, ns, name, replicas, pods.Items[0].Name, node)
 				Logf("Waiting %v for node %s to be ready once temporary network failure ends", resizeNodeReadyTimeout, node.Name)
-				if !waitForNodeToBe(c, node.Name, true, resizeNodeReadyTimeout) {
+				if !waitForNodeToBeReady(c, node.Name, resizeNodeReadyTimeout) {
 					Failf("Node %s did not become ready within %v", node.Name, resizeNodeReadyTimeout)
 				}
+
+				// sleep a bit, to allow Watch in NodeController to catch up.
+				time.Sleep(5 * time.Second)
 
 				By("verify whether new pods can be created on the re-attached node")
 				// increasing the RC size is not a valid way to test this

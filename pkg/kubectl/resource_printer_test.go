@@ -28,21 +28,23 @@ import (
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/testapi"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/api/v1"
-	"k8s.io/kubernetes/pkg/expapi"
+	"k8s.io/kubernetes/pkg/apis/experimental"
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/util"
+	"k8s.io/kubernetes/pkg/util/sets"
 
 	"github.com/ghodss/yaml"
 )
 
 type testStruct struct {
-	api.TypeMeta   `json:",inline"`
-	api.ObjectMeta `json:"metadata,omitempty"`
-	Key            string         `json:"Key"`
-	Map            map[string]int `json:"Map"`
-	StringList     []string       `json:"StringList"`
-	IntList        []int          `json:"IntList"`
+	unversioned.TypeMeta `json:",inline"`
+	api.ObjectMeta       `json:"metadata,omitempty"`
+	Key                  string         `json:"Key"`
+	Map                  map[string]int `json:"Map"`
+	StringList           []string       `json:"StringList"`
+	IntList              []int          `json:"IntList"`
 }
 
 func (ts *testStruct) IsAnAPIObject() {}
@@ -291,7 +293,7 @@ func TestNamePrinter(t *testing.T) {
 	}{
 		"singleObject": {
 			&api.Pod{
-				TypeMeta: api.TypeMeta{
+				TypeMeta: unversioned.TypeMeta{
 					Kind: "Pod",
 				},
 				ObjectMeta: api.ObjectMeta{
@@ -301,7 +303,7 @@ func TestNamePrinter(t *testing.T) {
 			"pod/foo\n"},
 		"List": {
 			&v1.List{
-				TypeMeta: v1.TypeMeta{
+				TypeMeta: unversioned.TypeMeta{
 					Kind: "List",
 				},
 				Items: []runtime.RawExtension{
@@ -388,7 +390,7 @@ func TestTemplateStrings(t *testing.T) {
 							Name: "bar",
 							State: api.ContainerState{
 								Running: &api.ContainerStateRunning{
-									StartedAt: util.Time{},
+									StartedAt: unversioned.Time{},
 								},
 							},
 						},
@@ -405,7 +407,7 @@ func TestTemplateStrings(t *testing.T) {
 							Name: "foo",
 							State: api.ContainerState{
 								Running: &api.ContainerStateRunning{
-									StartedAt: util.Time{},
+									StartedAt: unversioned.Time{},
 								},
 							},
 						},
@@ -413,7 +415,7 @@ func TestTemplateStrings(t *testing.T) {
 							Name: "bar",
 							State: api.ContainerState{
 								Running: &api.ContainerStateRunning{
-									StartedAt: util.Time{},
+									StartedAt: unversioned.Time{},
 								},
 							},
 						},
@@ -484,9 +486,9 @@ func TestPrinters(t *testing.T) {
 			}}},
 	}
 	// map of printer name to set of objects it should fail on.
-	expectedErrors := map[string]util.StringSet{
-		"template2": util.NewStringSet("pod", "emptyPodList", "endpoints"),
-		"jsonpath":  util.NewStringSet("emptyPodList", "nonEmptyPodList", "endpoints"),
+	expectedErrors := map[string]sets.String{
+		"template2": sets.NewString("pod", "emptyPodList", "endpoints"),
+		"jsonpath":  sets.NewString("emptyPodList", "nonEmptyPodList", "endpoints"),
 	}
 
 	for pName, p := range printers {
@@ -512,22 +514,22 @@ func TestPrintEventsResultSorted(t *testing.T) {
 			{
 				Source:         api.EventSource{Component: "kubelet"},
 				Message:        "Item 1",
-				FirstTimestamp: util.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
-				LastTimestamp:  util.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
+				FirstTimestamp: unversioned.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
+				LastTimestamp:  unversioned.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
 				Count:          1,
 			},
 			{
 				Source:         api.EventSource{Component: "scheduler"},
 				Message:        "Item 2",
-				FirstTimestamp: util.NewTime(time.Date(1987, time.June, 17, 0, 0, 0, 0, time.UTC)),
-				LastTimestamp:  util.NewTime(time.Date(1987, time.June, 17, 0, 0, 0, 0, time.UTC)),
+				FirstTimestamp: unversioned.NewTime(time.Date(1987, time.June, 17, 0, 0, 0, 0, time.UTC)),
+				LastTimestamp:  unversioned.NewTime(time.Date(1987, time.June, 17, 0, 0, 0, 0, time.UTC)),
 				Count:          1,
 			},
 			{
 				Source:         api.EventSource{Component: "kubelet"},
 				Message:        "Item 3",
-				FirstTimestamp: util.NewTime(time.Date(2002, time.December, 25, 0, 0, 0, 0, time.UTC)),
-				LastTimestamp:  util.NewTime(time.Date(2002, time.December, 25, 0, 0, 0, 0, time.UTC)),
+				FirstTimestamp: unversioned.NewTime(time.Date(2002, time.December, 25, 0, 0, 0, 0, time.UTC)),
+				LastTimestamp:  unversioned.NewTime(time.Date(2002, time.December, 25, 0, 0, 0, 0, time.UTC)),
 				Count:          1,
 			},
 		},
@@ -545,21 +547,21 @@ func TestPrintEventsResultSorted(t *testing.T) {
 	VerifyDatesInOrder(out, "\n" /* rowDelimiter */, "  " /* columnDelimiter */, t)
 }
 
-func TestPrintMinionStatus(t *testing.T) {
+func TestPrintNodeStatus(t *testing.T) {
 	printer := NewHumanReadablePrinter(false, false, false, false, []string{})
 	table := []struct {
-		minion api.Node
+		node   api.Node
 		status string
 	}{
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo1"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionTrue}}},
 			},
 			status: "Ready",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo2"},
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionTrue}}},
@@ -567,7 +569,7 @@ func TestPrintMinionStatus(t *testing.T) {
 			status: "Ready,SchedulingDisabled",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo3"},
 				Status: api.NodeStatus{Conditions: []api.NodeCondition{
 					{Type: api.NodeReady, Status: api.ConditionTrue},
@@ -576,14 +578,14 @@ func TestPrintMinionStatus(t *testing.T) {
 			status: "Ready",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo4"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionFalse}}},
 			},
 			status: "NotReady",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo5"},
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionFalse}}},
@@ -591,21 +593,21 @@ func TestPrintMinionStatus(t *testing.T) {
 			status: "NotReady,SchedulingDisabled",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo6"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: "InvalidValue", Status: api.ConditionTrue}}},
 			},
 			status: "Unknown",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo7"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{}}},
 			},
 			status: "Unknown",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo8"},
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: "InvalidValue", Status: api.ConditionTrue}}},
@@ -613,7 +615,7 @@ func TestPrintMinionStatus(t *testing.T) {
 			status: "Unknown,SchedulingDisabled",
 		},
 		{
-			minion: api.Node{
+			node: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo9"},
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{}}},
@@ -624,12 +626,12 @@ func TestPrintMinionStatus(t *testing.T) {
 
 	for _, test := range table {
 		buffer := &bytes.Buffer{}
-		err := printer.PrintObj(&test.minion, buffer)
+		err := printer.PrintObj(&test.node, buffer)
 		if err != nil {
-			t.Fatalf("An error occurred printing Minion: %#v", err)
+			t.Fatalf("An error occurred printing Node: %#v", err)
 		}
 		if !contains(strings.Fields(buffer.String()), test.status) {
-			t.Fatalf("Expect printing minion %s with status %#v, got: %#v", test.minion.Name, test.status, buffer.String())
+			t.Fatalf("Expect printing node %s with status %#v, got: %#v", test.node.Name, test.status, buffer.String())
 		}
 	}
 }
@@ -907,8 +909,8 @@ func TestPrintHumanReadableWithNamespace(t *testing.T) {
 				ObjectMeta:     api.ObjectMeta{Name: name, Namespace: namespaceName},
 				Source:         api.EventSource{Component: "kubelet"},
 				Message:        "Item 1",
-				FirstTimestamp: util.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
-				LastTimestamp:  util.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
+				FirstTimestamp: unversioned.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
+				LastTimestamp:  unversioned.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
 				Count:          1,
 			},
 			isNamespaced: true,
@@ -1213,16 +1215,16 @@ type stringTestList []struct {
 
 func TestTranslateTimestamp(t *testing.T) {
 	tl := stringTestList{
-		{"a while from now", translateTimestamp(util.Time{Time: time.Now().Add(2.1e9)}), "<invalid>"},
-		{"almost now", translateTimestamp(util.Time{Time: time.Now().Add(1.9e9)}), "0s"},
-		{"now", translateTimestamp(util.Time{Time: time.Now()}), "0s"},
-		{"unknown", translateTimestamp(util.Time{}), "<unknown>"},
-		{"30 seconds ago", translateTimestamp(util.Time{Time: time.Now().Add(-3e10)}), "30s"},
-		{"5 minutes ago", translateTimestamp(util.Time{Time: time.Now().Add(-3e11)}), "5m"},
-		{"an hour ago", translateTimestamp(util.Time{Time: time.Now().Add(-6e12)}), "1h"},
-		{"2 days ago", translateTimestamp(util.Time{Time: time.Now().AddDate(0, 0, -2)}), "2d"},
-		{"months ago", translateTimestamp(util.Time{Time: time.Now().AddDate(0, -3, 0)}), "92d"},
-		{"10 years ago", translateTimestamp(util.Time{Time: time.Now().AddDate(-10, 0, 0)}), "10y"},
+		{"a while from now", translateTimestamp(unversioned.Time{Time: time.Now().Add(2.1e9)}), "<invalid>"},
+		{"almost now", translateTimestamp(unversioned.Time{Time: time.Now().Add(1.9e9)}), "0s"},
+		{"now", translateTimestamp(unversioned.Time{Time: time.Now()}), "0s"},
+		{"unknown", translateTimestamp(unversioned.Time{}), "<unknown>"},
+		{"30 seconds ago", translateTimestamp(unversioned.Time{Time: time.Now().Add(-3e10)}), "30s"},
+		{"5 minutes ago", translateTimestamp(unversioned.Time{Time: time.Now().Add(-3e11)}), "5m"},
+		{"an hour ago", translateTimestamp(unversioned.Time{Time: time.Now().Add(-6e12)}), "1h"},
+		{"2 days ago", translateTimestamp(unversioned.Time{Time: time.Now().AddDate(0, 0, -2)}), "2d"},
+		{"months ago", translateTimestamp(unversioned.Time{Time: time.Now().AddDate(0, -3, 0)}), "92d"},
+		{"10 years ago", translateTimestamp(unversioned.Time{Time: time.Now().AddDate(-10, 0, 0)}), "10y"},
 	}
 	for _, test := range tl {
 		if test.got != test.exp {
@@ -1234,22 +1236,22 @@ func TestTranslateTimestamp(t *testing.T) {
 
 func TestPrintDeployment(t *testing.T) {
 	tests := []struct {
-		deployment expapi.Deployment
+		deployment experimental.Deployment
 		expect     string
 	}{
 		{
-			expapi.Deployment{
+			experimental.Deployment{
 				ObjectMeta: api.ObjectMeta{
 					Name:              "test1",
-					CreationTimestamp: util.Time{Time: time.Now().Add(1.9e9)},
+					CreationTimestamp: unversioned.Time{Time: time.Now().Add(1.9e9)},
 				},
-				Spec: expapi.DeploymentSpec{
+				Spec: experimental.DeploymentSpec{
 					Replicas: 5,
 					Template: &api.PodTemplateSpec{
 						Spec: api.PodSpec{Containers: make([]api.Container, 2)},
 					},
 				},
-				Status: expapi.DeploymentStatus{
+				Status: experimental.DeploymentStatus{
 					Replicas:        10,
 					UpdatedReplicas: 2,
 				},

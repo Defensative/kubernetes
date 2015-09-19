@@ -20,22 +20,24 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/expapi"
+	"k8s.io/kubernetes/pkg/api/unversioned"
+	"k8s.io/kubernetes/pkg/apis/experimental"
 )
 
 type Foo struct {
-	api.TypeMeta   `json:",inline"`
-	api.ObjectMeta `json:"metadata,omitempty" description:"standard object metadata"`
+	unversioned.TypeMeta `json:",inline"`
+	api.ObjectMeta       `json:"metadata,omitempty" description:"standard object metadata"`
 
 	SomeField  string `json:"someField"`
 	OtherField int    `json:"otherField"`
 }
 
 type FooList struct {
-	api.TypeMeta `json:",inline"`
-	api.ListMeta `json:"metadata,omitempty" description:"standard list metadata; see http://docs.k8s.io/api-conventions.md#metadata"`
+	unversioned.TypeMeta `json:",inline"`
+	unversioned.ListMeta `json:"metadata,omitempty" description:"standard list metadata; see http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata"`
 
 	items []Foo `json:"items"`
 }
@@ -52,12 +54,22 @@ func TestCodec(t *testing.T) {
 			name:      "missing kind",
 		},
 		{
-			obj:  &Foo{ObjectMeta: api.ObjectMeta{Name: "bar"}, TypeMeta: api.TypeMeta{Kind: "Foo"}},
+			obj:  &Foo{ObjectMeta: api.ObjectMeta{Name: "bar"}, TypeMeta: unversioned.TypeMeta{Kind: "Foo"}},
 			name: "basic",
 		},
 		{
-			obj:  &Foo{ObjectMeta: api.ObjectMeta{Name: "bar", ResourceVersion: "baz"}, TypeMeta: api.TypeMeta{Kind: "Foo"}},
+			obj:  &Foo{ObjectMeta: api.ObjectMeta{Name: "bar", ResourceVersion: "baz"}, TypeMeta: unversioned.TypeMeta{Kind: "Foo"}},
 			name: "resource version",
+		},
+		{
+			obj: &Foo{
+				ObjectMeta: api.ObjectMeta{
+					Name:              "bar",
+					CreationTimestamp: unversioned.Time{time.Unix(100, 0)},
+				},
+				TypeMeta: unversioned.TypeMeta{Kind: "Foo"},
+			},
+			name: "creation time",
 		},
 		{
 			obj: &Foo{
@@ -66,7 +78,7 @@ func TestCodec(t *testing.T) {
 					ResourceVersion: "baz",
 					Labels:          map[string]string{"foo": "bar", "baz": "blah"},
 				},
-				TypeMeta: api.TypeMeta{Kind: "Foo"},
+				TypeMeta: unversioned.TypeMeta{Kind: "Foo"},
 			},
 			name: "labels",
 		},
@@ -89,7 +101,7 @@ func TestCodec(t *testing.T) {
 			}
 			continue
 		}
-		rsrcObj, ok := obj.(*expapi.ThirdPartyResourceData)
+		rsrcObj, ok := obj.(*experimental.ThirdPartyResourceData)
 		if !ok {
 			t.Errorf("[%s] unexpected object: %v", test.name, obj)
 			continue
