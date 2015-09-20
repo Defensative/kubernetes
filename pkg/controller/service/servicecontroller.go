@@ -271,6 +271,7 @@ func (s *ServiceController) processDelta(delta *cache.Delta) (error, bool) {
             return err, notRetryable
         }
 
+		s.eventRecorder.Event(service, "DeletingLoadBalancer", "Deleting load balancer")
         if tcp {
             err = s.tcp_balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region)
         } else {
@@ -281,13 +282,6 @@ func (s *ServiceController) processDelta(delta *cache.Delta) (error, bool) {
 			s.eventRecorder.Event(service, "deleting loadbalancer failed", message)
             return err, retryable
         }
-		s.eventRecorder.Event(service, "DeletingLoadBalancer", "Deleting load balancer")
-		err := s.balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region)
-		if err != nil {
-			message := "Error deleting load balancer (will retry): " + err.Error()
-			s.eventRecorder.Event(service, "DeletingLoadBalancerFailed", message)
-			return err, retryable
-		}
 		s.eventRecorder.Event(service, "DeletedLoadBalancer", "Deleted load balancer")
 		s.cache.delete(namespacedName.String())
 	default:
@@ -343,6 +337,7 @@ func (s *ServiceController) createLoadBalancerIfNeeded(namespacedName types.Name
 			glog.Infof("Deleting existing load balancer for service %s that no longer needs a load balancer.", namespacedName)
 
             var err error
+			s.eventRecorder.Event(service, "DeletingLoadBalancer", "Deleting load balancer")
             if tcp {
                 err = s.tcp_balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region)
 			} else {
@@ -351,10 +346,6 @@ func (s *ServiceController) createLoadBalancerIfNeeded(namespacedName types.Name
             if err != nil {
                 return err, retryable
             }
-			s.eventRecorder.Event(service, "DeletingLoadBalancer", "Deleting load balancer")
-			if err := s.balancer.EnsureTCPLoadBalancerDeleted(s.loadBalancerName(service), s.zone.Region); err != nil {
-				return err, retryable
-			}
 			s.eventRecorder.Event(service, "DeletedLoadBalancer", "Deleted load balancer")
 		}
 
