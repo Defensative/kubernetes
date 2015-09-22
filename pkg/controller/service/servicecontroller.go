@@ -422,39 +422,18 @@ func (s *ServiceController) createExternalLoadBalancer(service *api.Service) err
     }
 
     var status *api.LoadBalancerStatus
-	if len(service.Spec.ExternalIPs) > 0 {
-		for _, publicIP := range service.Spec.ExternalIPs {
-			// TODO: Make this actually work for multiple IPs by using different
-			// names for each. For now, we'll just create the first and break.
-            if tcp {
-                status, err = s.tcp_balancer.EnsureTCPLoadBalancer(name, s.zone.Region, net.ParseIP(publicIP),
-                    ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
-            } else {
-                status, err = s.udp_balancer.EnsureUDPLoadBalancer(name, s.zone.Region, net.ParseIP(publicIP),
-                    ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
-            }
-			if err != nil {
-				return err
-			} else {
-				service.Status.LoadBalancer = *status
-			}
-			break
-		}
-	} else {
-        if tcp {
-            status, err = s.tcp_balancer.EnsureTCPLoadBalancer(name, s.zone.Region, nil,
-                ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
-        } else {
-            status, err = s.udp_balancer.EnsureUDPLoadBalancer(name, s.zone.Region, nil,
-                ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
-        }
-		if err != nil {
-			return err
-		} else {
-			service.Status.LoadBalancer = *status
-		}
-	}
-
+    if tcp {
+        status, err = s.tcp_balancer.EnsureTCPLoadBalancer(name, s.zone.Region, net.ParseIP(service.Spec.LoadBalancerIP),
+            ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
+    } else {
+        status, err = s.udp_balancer.EnsureUDPLoadBalancer(name, s.zone.Region, net.ParseIP(service.Spec.LoadBalancerIP),
+            ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
+    }
+    if err != nil {
+        return err
+    } else {
+        service.Status.LoadBalancer = *status
+    }
 	return nil
 }
 
