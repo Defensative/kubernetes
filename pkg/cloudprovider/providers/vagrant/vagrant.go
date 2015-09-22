@@ -33,7 +33,7 @@ import (
 
 const ProviderName = "vagrant"
 
-// VagrantCloud is an implementation of Interface, TCPLoadBalancer and Instances for developer managed Vagrant cluster.
+// VagrantCloud is an implementation of Interface, LoadBalancer and Instances for developer managed Vagrant cluster.
 type VagrantCloud struct {
 	saltURL  string
 	saltUser string
@@ -91,8 +91,8 @@ func (v *VagrantCloud) ProviderName() string {
 	return ProviderName
 }
 
-// TCPLoadBalancer returns an implementation of TCPLoadBalancer for Vagrant cloud.
-func (v *VagrantCloud) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
+// LoadBalancer returns an implementation of LoadBalancer for Vagrant cloud.
+func (v *VagrantCloud) LoadBalancer() (cloudprovider.LoadBalancer, bool) {
 	return nil, false
 }
 

@@ -47,7 +47,7 @@ const (
 
 const k8sNodeRouteTag = "k8s-node-route"
 
-// GCECloud is an implementation of Interface, TCPLoadBalancer and Instances for Google Compute Engine.
+// GCECloud is an implementation of Interface, LoadBalancer and Instances for Google Compute Engine.
 type GCECloud struct {
 	service          *compute.Service
 	containerService *container.Service
@@ -192,8 +192,8 @@ func (gce *GCECloud) ProviderName() string {
 	return ProviderName
 }
 
-// TCPLoadBalancer returns an implementation of TCPLoadBalancer for Google Compute Engine.
-func (gce *GCECloud) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
+// LoadBalancer returns an implementation of LoadBalancer for Google Compute Engine.
+func (gce *GCECloud) LoadBalancer() (cloudprovider.LoadBalancer, bool) {
 	return gce, true
 }
 
@@ -312,8 +312,8 @@ func (gce *GCECloud) waitForZoneOp(op *compute.Operation) error {
 	})
 }
 
-// GetTCPLoadBalancer is an implementation of TCPLoadBalancer.GetTCPLoadBalancer
-func (gce *GCECloud) GetTCPLoadBalancer(name, region string) (*api.LoadBalancerStatus, bool, error) {
+// GetLoadBalancer is an implementation of LoadBalancer.GetLoadBalancer
+func (gce *GCECloud) GetLoadBalancer(name, region string) (*api.LoadBalancerStatus, bool, error) {
 	fwd, err := gce.service.ForwardingRules.Get(gce.projectID, region, name).Do()
 	if err == nil {
 		status := &api.LoadBalancerStatus{}
@@ -349,16 +349,21 @@ func makeFirewallName(name string) string {
 	return fmt.Sprintf("k8s-fw-%s", name)
 }
 
-// EnsureTCPLoadBalancer is an implementation of TCPLoadBalancer.EnsureTCPLoadBalancer.
+// EnsureLoadBalancer is an implementation of LoadBalancer.EnsureLoadBalancer.
 // TODO(a-robinson): Don't just ignore specified IP addresses. Check if they're
 // owned by the project and available to be used, and use them if they are.
-func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, loadBalancerIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
+func (gce *GCECloud) EnsureLoadBalancer(name, region string, loadBalancerIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
 	if len(hosts) == 0 {
-		return nil, fmt.Errorf("Cannot EnsureTCPLoadBalancer() with no hosts")
+		return nil, fmt.Errorf("Cannot EnsureLoadBalancer() with no hosts")
 	}
 
+    // The service controller verified all the protocols match on the ports, just check and use the first one
+    if ports[0].Protocol != api.ProtocolTCP && ports[0].Protocol != api.ProtocolUDP {
+		return nil, fmt.Errorf("Invalid protocol %s, only TCP and UDP are supported", ports[0].Protocol)
+    }
+
 	glog.V(2).Infof("Checking if load balancer already exists: %s", name)
-	_, exists, err := gce.GetTCPLoadBalancer(name, region)
+	_, exists, err := gce.GetLoadBalancer(name, region)
 	if err != nil {
 		return nil, fmt.Errorf("error checking if GCE load balancer already exists: %v", err)
 	}
@@ -366,7 +371,7 @@ func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, loadBalancerIP n
 	// TODO: Implement a more efficient update strategy for common changes than delete & create
 	// In particular, if we implement hosts update, we can get rid of UpdateHosts
 	if exists {
-		err := gce.EnsureTCPLoadBalancerDeleted(name, region)
+		err := gce.EnsureLoadBalancerDeleted(name, region)
 		if err != nil {
 			return nil, fmt.Errorf("error deleting existing GCE load balancer: %v", err)
 		}
@@ -395,7 +400,7 @@ func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, loadBalancerIP n
 	}
 	req := &compute.ForwardingRule{
 		Name:       name,
-		IPProtocol: "TCP",
+		IPProtocol: string(ports[0].Protocol),
 		PortRange:  fmt.Sprintf("%d-%d", minPort, maxPort),
 		Target:     gce.targetPoolURL(name, region),
 	}
@@ -433,7 +438,7 @@ func (gce *GCECloud) EnsureTCPLoadBalancer(name, region string, loadBalancerIP n
 		TargetTags:   []string{hostTag},
 		Allowed: []*compute.FirewallAllowed{
 			{
-				IPProtocol: "tcp",
+				IPProtocol: strings.ToLower(string(ports[0].Protocol)),
 				Ports:      allowedPorts,
 			},
 		},
@@ -462,8 +467,8 @@ func (gce *GCECloud) computeHostTag(host string) string {
 	return host[:lastHyphen]
 }
 
-// UpdateTCPLoadBalancer is an implementation of TCPLoadBalancer.UpdateTCPLoadBalancer.
-func (gce *GCECloud) UpdateTCPLoadBalancer(name, region string, hosts []string) error {
+// UpdateLoadBalancer is an implementation of LoadBalancer.UpdateLoadBalancer.
+func (gce *GCECloud) UpdateLoadBalancer(name, region string, hosts []string) error {
 	pool, err := gce.service.TargetPools.Get(gce.projectID, region, name).Do()
 	if err != nil {
 		return err
@@ -523,8 +528,8 @@ func (gce *GCECloud) UpdateTCPLoadBalancer(name, region string, hosts []string) 
 	return nil
 }
 
-// EnsureTCPLoadBalancerDeleted is an implementation of TCPLoadBalancer.EnsureTCPLoadBalancerDeleted.
-func (gce *GCECloud) EnsureTCPLoadBalancerDeleted(name, region string) error {
+// EnsureLoadBalancerDeleted is an implementation of LoadBalancer.EnsureLoadBalancerDeleted.
+func (gce *GCECloud) EnsureLoadBalancerDeleted(name, region string) error {
 	op, err := gce.service.ForwardingRules.Delete(gce.projectID, region, name).Do()
 	if err != nil && isHTTPErrorCode(err, http.StatusNotFound) {
 		glog.Infof("Forwarding rule %s already deleted. Continuing to delete target pool.", name)
@@ -665,7 +670,7 @@ func (gce *GCECloud) CreateGlobalForwardingRule(proxy *compute.TargetHttpProxy, 
 		Name:       name,
 		Target:     proxy.SelfLink,
 		PortRange:  portRange,
-		IPProtocol: "TCP",
+		IPProtocol: "tcp",
 	}
 	op, err := gce.service.GlobalForwardingRules.Insert(gce.projectID, rule).Do()
 	if err != nil {
