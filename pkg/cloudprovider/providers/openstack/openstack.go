@@ -532,10 +532,10 @@ func (lb *LoadBalancer) EnsureLoadBalancer(name, region string, loadBalancerIP n
 		return nil, fmt.Errorf("multiple ports are not yet supported in openstack load balancers")
 	}
 
-    // The service controller verified all the protocols match on the ports, just check and use the first one
-    if ports[0].Protocol != api.ProtocolTCP {
-        return nil, fmt.Errorf("Only TCP LoadBalancer is supported for openstack load balancers")
-    }
+	// The service controller verified all the protocols match on the ports, just check and use the first one
+	if ports[0].Protocol != api.ProtocolTCP {
+		return nil, fmt.Errorf("Only TCP LoadBalancer is supported for openstack load balancers")
+	}
 
 	var persistence *vips.SessionPersistence
 	switch affinity {

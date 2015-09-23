@@ -357,10 +357,10 @@ func (gce *GCECloud) EnsureLoadBalancer(name, region string, loadBalancerIP net.
 		return nil, fmt.Errorf("Cannot EnsureLoadBalancer() with no hosts")
 	}
 
-    // The service controller verified all the protocols match on the ports, just check and use the first one
-    if ports[0].Protocol != api.ProtocolTCP && ports[0].Protocol != api.ProtocolUDP {
+	// The service controller verified all the protocols match on the ports, just check and use the first one
+	if ports[0].Protocol != api.ProtocolTCP && ports[0].Protocol != api.ProtocolUDP {
 		return nil, fmt.Errorf("Invalid protocol %s, only TCP and UDP are supported", ports[0].Protocol)
-    }
+	}
 
 	glog.V(2).Infof("Checking if load balancer already exists: %s", name)
 	_, exists, err := gce.GetLoadBalancer(name, region)

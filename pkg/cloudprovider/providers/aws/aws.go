@@ -1604,10 +1604,10 @@ func (s *AWSCloud) EnsureLoadBalancer(name, region string, publicIP net.IP, port
 		return nil, fmt.Errorf("unsupported load balancer affinity: %v", affinity)
 	}
 
-    // The service controller verified all the protocols match on the ports, just check and use the first one
-    if ports[0].Protocol != api.ProtocolTCP {
-        return nil, fmt.Errorf("Only TCP LoadBalancer is supported for AWS ELB")
-    }
+	// The service controller verified all the protocols match on the ports, just check and use the first one
+	if ports[0].Protocol != api.ProtocolTCP {
+		return nil, fmt.Errorf("Only TCP LoadBalancer is supported for AWS ELB")
+	}
 
 	if publicIP != nil {
 		return nil, fmt.Errorf("publicIP cannot be specified for AWS ELB")

@@ -378,8 +378,8 @@ func (s *ServiceController) createExternalLoadBalancer(service *api.Service) err
 		return err
 	}
 	name := s.loadBalancerName(service)
-    // getPortsForLB already verified that the protocol matches for all ports.
-    // The cloud provider will verify the protocol is supported
+	// getPortsForLB already verified that the protocol matches for all ports.
+	// The cloud provider will verify the protocol is supported
 	status, err := s.balancer.EnsureLoadBalancer(name, s.zone.Region, net.ParseIP(service.Spec.LoadBalancerIP),
 		ports, hostsFromNodeList(&nodes), service.Spec.SessionAffinity)
 	if err != nil {
@@ -484,18 +484,18 @@ func (s *ServiceController) loadBalancerName(service *api.Service) string {
 }
 
 func getPortsForLB(service *api.Service) ([]*api.ServicePort, error) {
-    var protocol api.Protocol
+	var protocol api.Protocol
 
 	ports := []*api.ServicePort{}
 	for i := range service.Spec.Ports {
 		sp := &service.Spec.Ports[i]
-        // The check on protocol was removed here.  The cloud provider itself is now responsible for all protocol validation
+		// The check on protocol was removed here.  The cloud provider itself is now responsible for all protocol validation
 		ports = append(ports, sp)
-        if protocol == "" {
-            protocol = sp.Protocol
-        } else if protocol != sp.Protocol && wantsExternalLoadBalancer(service) {
-            return nil, fmt.Errorf("mixed protocol external load balancers are not supported.")
-        }
+		if protocol == "" {
+			protocol = sp.Protocol
+		} else if protocol != sp.Protocol && wantsExternalLoadBalancer(service) {
+			return nil, fmt.Errorf("mixed protocol external load balancers are not supported.")
+		}
 	}
 	return ports, nil
 }
