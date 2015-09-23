@@ -1593,6 +1593,10 @@ func (s *AWSCloud) createTags(request *ec2.CreateTagsInput) (*ec2.CreateTagsOutp
 // EnsureLoadBalancer implements LoadBalancer.EnsureLoadBalancer
 // TODO(justinsb) It is weird that these take a region.  I suspect it won't work cross-region anwyay.
 func (s *AWSCloud) EnsureLoadBalancer(name, region string, publicIP net.IP, ports []*api.ServicePort, hosts []string, affinity api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
+	if len(ports) == 0 {
+		return nil, fmt.Errorf("requested load balancer with no ports")
+	}
+
 	glog.V(2).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %v)", name, ports[0].Protocol, region, publicIP, ports, hosts)
 
 	if region != s.region {

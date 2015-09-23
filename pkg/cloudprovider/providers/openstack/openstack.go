@@ -526,6 +526,10 @@ func (lb *LoadBalancer) GetLoadBalancer(name, region string) (*api.LoadBalancerS
 // each region.
 
 func (lb *LoadBalancer) EnsureLoadBalancer(name, region string, loadBalancerIP net.IP, ports []*api.ServicePort, hosts []string, affinity api.ServiceAffinity) (*api.LoadBalancerStatus, error) {
+	if len(ports) == 0 {
+		return nil, fmt.Errorf("no ports provided to openstack load balancer")
+	}
+
 	glog.V(4).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %v, %v)", name, ports[0].Protocol, region, loadBalancerIP, ports, hosts, affinity)
 
 	if len(ports) > 1 {
