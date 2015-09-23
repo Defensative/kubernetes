@@ -138,17 +138,17 @@ func (f *FakeCloud) EnsureLoadBalancer(name, region string, externalIP net.IP, p
 	return status, f.Err
 }
 
-// UpdateTCPLoadBalancer is a test-spy implementation of TCPLoadBalancer.UpdateTCPLoadBalancer.
+// UpdateLoadBalancer is a test-spy implementation of LoadBalancer.UpdateLoadBalancer.
 // It adds an entry "update" into the internal method call record.
-func (f *FakeCloud) UpdateTCPLoadBalancer(name, region string, hosts []string) error {
+func (f *FakeCloud) UpdateLoadBalancer(name, region string, hosts []string) error {
 	f.addCall("update")
 	f.UpdateCalls = append(f.UpdateCalls, FakeUpdateBalancerCall{name, region, hosts})
 	return f.Err
 }
 
-// EnsureTCPLoadBalancerDeleted is a test-spy implementation of TCPLoadBalancer.EnsureTCPLoadBalancerDeleted.
+// EnsureLoadBalancerDeleted is a test-spy implementation of LoadBalancer.EnsureLoadBalancerDeleted.
 // It adds an entry "delete" into the internal method call record.
-func (f *FakeCloud) EnsureTCPLoadBalancerDeleted(name, region string) error {
+func (f *FakeCloud) EnsureLoadBalancerDeleted(name, region string) error {
 	f.addCall("delete")
 	return f.Err
 }
