@@ -362,7 +362,7 @@ func (os *Rackspace) ProviderName() string {
 	return ProviderName
 }
 
-func (os *Rackspace) TCPLoadBalancer() (cloudprovider.TCPLoadBalancer, bool) {
+func (os *Rackspace) LoadBalancer() (cloudprovider.LoadBalancer, bool) {
 	return nil, false
 }
 

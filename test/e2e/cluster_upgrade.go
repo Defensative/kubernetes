@@ -197,7 +197,7 @@ var _ = Describe("Skipped", func() {
 		var rcName, ip, v string
 		var ingress api.LoadBalancerIngress
 		f := Framework{BaseName: "cluster-upgrade"}
-		var w *WebserverTest
+		var w *ServerTest
 
 		BeforeEach(func() {
 			// The version is determined once at the beginning of the test so that
@@ -211,7 +211,7 @@ var _ = Describe("Skipped", func() {
 
 			By("Setting up the service, RC, and pods")
 			f.beforeEach()
-			w = NewWebserverTest(f.Client, f.Namespace.Name, svcName)
+			w = NewServerTest(f.Client, f.Namespace.Name, svcName)
 			rc := w.CreateWebserverRC(replicas)
 			rcName = rc.ObjectMeta.Name
 			svc := w.BuildServiceSpec()
